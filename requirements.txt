@@ -1,0 +1,8 @@
+pandas>=2.2
+numpy
+requests
+matplotlib
+yfinance>=0.2.40
+xlrd>=2.0
+lxml
+openpyxl
