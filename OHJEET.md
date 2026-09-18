@@ -51,6 +51,7 @@ Luo kolme:
 | `GMAIL_USER` | lähettävä Gmail-osoitteesi |
 | `GMAIL_APP_PASSWORD` | 16-merkkinen sovellussalasana |
 | `EMAIL_TO` | osoite, johon raportti tulee (voi olla sama) |
+| `FRED_API_KEY` | *valinnainen* — ilmainen FRED-avain, ks. kohta "Jos jokin lähde ei vastaa" |
 
 ## 5. Ensimmäinen ajo (2 min)
 
@@ -85,8 +86,21 @@ ANALOGIA ...                mitä huippua nykytila muistuttaa, ja miksi ei
 ## Jos jokin lähde ei vastaa
 
 Skripti ei kaadu: puuttuva muuttuja jää pois, *datan kattavuus* laskee ja
-raportin loppuun tulee VAROITUKSET-osio. FINRA:n margin debt tallentuu
-välimuistiin `data/margin_debt_cache.csv`, joten yksittäinen katkos ei näy.
+raportin loppuun tulee VAROITUKSET-osio. Jokaisella lähteellä on kolme
+tasoa: uudelleenyritys, varalähde ja välimuisti edellisestä onnistuneesta
+ajosta (`data/fred_cache/`, `data/shiller_cache.csv`, `data/margin_debt_cache.csv`).
+Välimuisti tallentuu repoon, joten yksittäinen katkos ei näy raportissa.
+
+- **FRED aikakatkaisee** (yleistä kotiverkosta ja joistakin yritysverkoista):
+  hanki ilmainen API-avain osoitteesta fred.stlouisfed.org/docs/api/api_key.html
+  (vaatii FRED-tilin, 2 min) ja lisää se GitHubiin salaisuutena `FRED_API_KEY`.
+  Avaimen kanssa skripti käyttää virallista rajapintaa, joka on luotettavin reitti.
+- **Shiller**: CAPE lasketaan itse hinta-, tulos- ja CPI-sarakkeista, ja jos
+  taulukko ei aukea, käytetään multpl.com:n kuukausitaulukkoa. Virhetilanteessa
+  syntyy `outputs/shiller_debug.txt`, jonka voit lähettää minulle.
+- **Ajo omalla koneella** (`python kupla.py --no-email`) toimii, mutta
+  tarkoitettu ympäristö on GitHub Actions, jonka verkosta kaikki lähteet
+  vastaavat yleensä ongelmitta.
 
 ## Muutettavat asetukset (kupla.py alussa)
 
