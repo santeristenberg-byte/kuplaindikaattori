@@ -1,0 +1,37 @@
+name: Kuplaindikaattori
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"     # maanantaisin klo 05:00 UTC (08:00 kesäaikaa / 07:00 talviaikaa)
+  workflow_dispatch:         # sallii myös käsin käynnistyksen Actions-välilehdeltä
+
+permissions:
+  contents: write            # bot saa tallentaa historian repoon
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Asenna kirjastot
+        run: pip install -r requirements.txt
+
+      - name: Aja indikaattori ja lähetä raportti
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python kupla.py
+
+      - name: Tallenna historia repoon
+        run: |
+          git config user.name "kupla-bot"
+          git config user.email "kupla-bot@users.noreply.github.com"
+          git add data outputs
+          git commit -m "Viikkoajo $(date -u +%F)" || echo "Ei muutoksia"
+          git push
