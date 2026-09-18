@@ -26,6 +26,7 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python kupla.py
 
       - name: Tallenna historia repoon
