@@ -61,7 +61,9 @@ UA = {
 }
 # FRED: useita reittejä samaan dataan; kokeillaan järjestyksessä
 FRED_URLS = [
-    "https://fred.stlouisfed.org/graph/fredgraph.csv?id={id}",
+    # cosd pakottaa koko historian: ilman sitä päivittäiset sarjat (korot, spreadit, valuutat)
+    # palautuvat vain kaavion oletusikkunalta (~3 v)
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id={id}&cosd=1900-01-01&coed=2100-12-31",
     "https://fred.stlouisfed.org/series/{id}/downloaddata/{id}.csv",
     "https://fred.stlouisfed.org/data/{id}.txt",
 ]
@@ -82,7 +84,7 @@ FINRA_URL = "https://www.finra.org/investors/learn-to-invest/advanced-investing/
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 HTTP_RETRIES = 3
 
-VERSION = "v0.3 (korjattu 2026-09-18, ffill+n/a-syyt+FINRA-siemen)"
+VERSION = "v0.4 (2026-09-18: FRED koko historia, B7 12 kk)"
 
 DEMO = False
 WARNINGS: list[str] = []
@@ -447,12 +449,12 @@ def build_variables() -> tuple[pd.DataFrame, dict]:
     vars_: dict[str, pd.Series] = {}
     meta: dict[str, dict] = {}
 
-    def add(key, name, pillar, series, invert=False):
+    def add(key, name, pillar, series, invert=False, ffill=7):
         if series is None or series.dropna().empty:
             warn(f"Muuttuja {key} ({name}) puuttuu")
             return
         vars_[key] = series.astype(float)
-        meta[key] = {"name": name, "pillar": pillar, "invert": invert}
+        meta[key] = {"name": name, "pillar": pillar, "invert": invert, "ffill": ffill}
 
     sh = safe(fetch_shiller)
     spx = safe(fetch_yahoo, "^GSPC")
@@ -537,7 +539,8 @@ def build_variables() -> tuple[pd.DataFrame, dict]:
 
     debt = safe(fetch_fred, "QUSPAM770A")     # yksityinen velka / BKT (BIS)
     if debt is not None:
-        add("B7", "Yksityisen velan/BKT 3 v muutos", "B", debt - debt.shift(12))
+        # BIS julkaisee 2–3 neljänneksen viiveellä; hidas muuttuja, joten 12 kk kantaminen on ok
+        add("B7", "Yksityisen velan/BKT 3 v muutos", "B", debt - debt.shift(12), ffill=12)
 
     frame = pd.DataFrame(vars_).sort_index()
     return frame, meta
@@ -551,7 +554,7 @@ def compute(frame: pd.DataFrame, meta: dict):
     # raportoidaan 1–2 neljänneksen viiveellä, joten lyhyempi raja jättäisi tuoreimman
     # kuukauden tyhjäksi. Kaikki tässä täytettävät ovat hitaita taso-/suhdemuuttujia,
     # joten arvon kantaminen eteenpäin neljänneksen on vakiokäytäntö.
-    filled = frame.ffill(limit=7)
+    filled = pd.DataFrame({k: frame[k].ffill(limit=meta[k].get("ffill", 7)) for k in frame.columns}, index=frame.index)
 
     pct = pd.DataFrame(index=filled.index)
     z = pd.DataFrame(index=filled.index)
