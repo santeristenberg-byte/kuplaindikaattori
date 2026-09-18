@@ -82,6 +82,8 @@ FINRA_URL = "https://www.finra.org/investors/learn-to-invest/advanced-investing/
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 HTTP_RETRIES = 3
 
+VERSION = "v0.2 (korjattu 2026-09-18)"
+
 DEMO = False
 WARNINGS: list[str] = []
 
@@ -693,6 +695,11 @@ def main():
     ap.add_argument("--no-email", action="store_true")
     args = ap.parse_args()
     DEMO = args.demo
+
+    print("=" * 64, flush=True)
+    print(f"KUPLAINDIKAATTORI {VERSION} — ajettava tiedosto: {os.path.abspath(__file__)}", flush=True)
+    print(f"HTTP-aikaraja {HTTP_TIMEOUT}s, uusinnat {HTTP_RETRIES}, FRED-avain: {'ON' if FRED_API_KEY else 'EI'}", flush=True)
+    print("=" * 64, flush=True)
 
     frame, meta = build_variables()
     if frame.empty:
