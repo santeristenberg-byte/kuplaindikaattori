@@ -1,0 +1,32 @@
+KUPLAINDIKAATTORI — viikko 38/2026   (data 2026-09-30)
+================================================================
+KUPLARISKI        75.9 / 100   Kupla-alue
+                 datan kattavuus 67 %
+  Arvostus                 99.5   (paino 60 %, kattavuus 75 %)
+  Vipu & likviditeetti     40.4   (paino 40 %, kattavuus 60 %)
+  Ääriarvoja               3 / 6 muuttujasta yli 90. persentiilin (50 %)
+
+MUUTTUJAT (persentiili omaa historiaa vasten, 100 = kuplamaisin)
+  A1 Shiller CAPE (S&P 500)                            100  ##########
+  A4 Buffett-indikaattori (Wilshire 5000 / BKT)        100  #########
+  A6 Osakeriskipreemio (1/CAPE − reaalikorko)           99  #########
+  A8 Tobinin Q                                         n/a  
+  B3 Reaalinen M2-kasvu (12 kk)                         41  ####
+  B4 Keskuspankkilikviditeetti, 12 kk muutos (Fed+EKP+BoJ)   15  #
+  B5 High yield -luottomarginaali                      n/a  
+  B6 Reaalinen ohjauskorko                              66  ######
+  B7 Yksityisen velan/BKT 3 v muutos                   n/a  
+
+ANALOGIA (mitä historiallista huippua nykytila muistuttaa)
+  2000-03 Dotcom               73 %   (5 yhteistä muuttujaa)
+  2021-11 Pandemiakupla        30 %   (6 yhteistä muuttujaa)
+  2007-10 Luottokupla          13 %   (5 yhteistä muuttujaa)
+  1972-12 Nifty Fifty           0 %   (4 yhteistä muuttujaa)
+  Samankaltaisinta (2000-03 Dotcom): Shiller CAPE (S&P 500); Osakeriskipreemio (1/CAPE − reaalikorko); Reaalinen M2-kasvu (12 kk)
+  Erilaisinta:      Reaalinen ohjauskorko; Buffett-indikaattori (Wilshire 5000 / BKT); Reaalinen M2-kasvu (12 kk)
+
+Vaihe 1: mukana pilarit A ja B. Pilarit C (spekulaatio), D (keskittyminen) ja E (ajoitus) lisätään myöhemmin.
+
+VAROITUKSET:
+  - FINRA-haku epäonnistui (https://www.finra.org/investors/learn-to-invest/advanced-investing/margin-statistics: 403 Client Error: Forbidden for url: https://www.finra.org/investors/learn-to-invest/advanced-investing/margin-statistics); käytetään välimuistia
+  - fetch_finra_margin() epäonnistui: Margin debt -dataa ei saatu mistään
