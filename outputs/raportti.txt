@@ -1,29 +1,29 @@
 KUPLAINDIKAATTORI — viikko 38/2026   (data 2026-09-30)
 ================================================================
-KUPLARISKI        75.9 / 100   Kupla-alue
-                 datan kattavuus 67 %
-  Arvostus                 99.5   (paino 60 %, kattavuus 75 %)
+KUPLARISKI        75.9 / 100   Kupla-alue  (+0.0 vs. edellinen ajo 2026-09-18)
+                 datan kattavuus 78 %
+  Arvostus                 99.5   (paino 60 %, kattavuus 100 %)
   Vipu & likviditeetti     40.4   (paino 40 %, kattavuus 60 %)
-  Ääriarvoja               3 / 6 muuttujasta yli 90. persentiilin (50 %)
+  Ääriarvoja               4 / 7 muuttujasta yli 90. persentiilin (57 %)
 
 MUUTTUJAT (persentiili omaa historiaa vasten, 100 = kuplamaisin)
   A1 Shiller CAPE (S&P 500)                            100  ##########
   A4 Buffett-indikaattori (Wilshire 5000 / BKT)        100  #########
   A6 Osakeriskipreemio (1/CAPE − reaalikorko)           99  #########
-  A8 Tobinin Q                                         n/a  
+  A8 Tobinin Q                                         100  #########
   B3 Reaalinen M2-kasvu (12 kk)                         41  ####
   B4 Keskuspankkilikviditeetti, 12 kk muutos (Fed+EKP+BoJ)   15  #
-  B5 High yield -luottomarginaali                      n/a  
+  B5 High yield -luottomarginaali                      n/a    (historia 37 kk < 120 kk)
   B6 Reaalinen ohjauskorko                              66  ######
-  B7 Yksityisen velan/BKT 3 v muutos                   n/a  
+  B7 Yksityisen velan/BKT 3 v muutos                   n/a    (viimeisin data 2025-10-31, 11 kk vanha)
 
 ANALOGIA (mitä historiallista huippua nykytila muistuttaa)
-  2000-03 Dotcom               73 %   (5 yhteistä muuttujaa)
-  2021-11 Pandemiakupla        30 %   (6 yhteistä muuttujaa)
-  2007-10 Luottokupla          13 %   (5 yhteistä muuttujaa)
-  1972-12 Nifty Fifty           0 %   (4 yhteistä muuttujaa)
+  2000-03 Dotcom               68 %   (6 yhteistä muuttujaa)
+  2021-11 Pandemiakupla        34 %   (7 yhteistä muuttujaa)
+  2007-10 Luottokupla           5 %   (6 yhteistä muuttujaa)
+  1972-12 Nifty Fifty           0 %   (5 yhteistä muuttujaa)
   Samankaltaisinta (2000-03 Dotcom): Shiller CAPE (S&P 500); Osakeriskipreemio (1/CAPE − reaalikorko); Reaalinen M2-kasvu (12 kk)
-  Erilaisinta:      Reaalinen ohjauskorko; Buffett-indikaattori (Wilshire 5000 / BKT); Reaalinen M2-kasvu (12 kk)
+  Erilaisinta:      Reaalinen ohjauskorko; Tobinin Q; Buffett-indikaattori (Wilshire 5000 / BKT)
 
 Vaihe 1: mukana pilarit A ja B. Pilarit C (spekulaatio), D (keskittyminen) ja E (ajoitus) lisätään myöhemmin.
 
