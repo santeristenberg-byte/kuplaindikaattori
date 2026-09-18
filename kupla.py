@@ -82,7 +82,7 @@ FINRA_URL = "https://www.finra.org/investors/learn-to-invest/advanced-investing/
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 HTTP_RETRIES = 3
 
-VERSION = "v0.2 (korjattu 2026-09-18)"
+VERSION = "v0.3 (korjattu 2026-09-18, ffill+n/a-syyt+FINRA-siemen)"
 
 DEMO = False
 WARNINGS: list[str] = []
@@ -354,12 +354,50 @@ def _shiller_from_multpl() -> pd.DataFrame:
     return df.sort_index()
 
 
+def _read_margin_seed() -> pd.Series:
+    """Lukee käyttäjän repoon tallentaman FINRA-siemendatan (data/finra_margin_seed.csv).
+
+    Muoto: kaksi saraketta, otsikkorivi vapaa. Ensimmäinen = kuukausi, toinen = margin debt.
+    Kuukausi voi olla muodossa 2024-03, 03/2024, Mar-24 tai Mar 2024. Luvut voivat sisältää
+    pilkkuja tai dollarimerkkejä. Tämä on tarkoitettu kertaluonteiseksi historian syötöksi,
+    koska FINRA:n sivu torjuu automaattiset haut (403)."""
+    for name in ("finra_margin_seed.csv", "finra_margin_seed.xlsx"):
+        p = os.path.join(DATA_DIR, name)
+        if not os.path.exists(p):
+            continue
+        try:
+            df = pd.read_excel(p, header=None) if name.endswith("xlsx") else pd.read_csv(p, header=None)
+            df = df.iloc[:, :2].dropna()
+            raw = df.iloc[:, 0].astype(str).str.strip()
+            # Täsmälliset muodot ensin (yksiselitteisiä), yleinen arvaus vasta viimeisenä
+            d = pd.Series(pd.NaT, index=raw.index)
+            for fmt in ("%b-%y", "%b-%Y", "%b %Y", "%B %Y", "%m/%Y", "%Y-%m", "%Y-%m-%d"):
+                miss = d.isna()
+                if miss.any():
+                    d[miss] = pd.to_datetime(raw[miss], format=fmt, errors="coerce")
+            miss = d.isna()
+            if miss.any():
+                d[miss] = pd.to_datetime(raw[miss], errors="coerce")
+            v = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
+            s = pd.Series(v.values, index=d.values).dropna()
+            s = s[s.index.notna()]
+            if not s.empty:
+                return to_monthly(s)
+        except Exception as e:  # noqa: BLE001
+            warn(f"FINRA-siementiedostoa {name} ei voitu lukea: {e}")
+    return pd.Series(dtype=float)
+
+
 def fetch_finra_margin() -> pd.Series:
-    """Margin debt (milj. USD). Yhdistää verkkohaun repossa olevaan välimuistiin."""
+    """Margin debt (milj. USD). Yhdistää siemendatan, verkkohaun ja välimuistin."""
     cache = pd.Series(dtype=float)
     if os.path.exists(MARGIN_CACHE):
         c = pd.read_csv(MARGIN_CACHE, parse_dates=["date"], index_col="date")
         cache = c["margin_debt"].astype(float)
+    seed = _read_margin_seed()
+    if not seed.empty:
+        cache = pd.concat([seed, cache])
+        cache = cache[~cache.index.duplicated(keep="last")].sort_index()
 
     if DEMO:
         return demo_series("1997-01-01", 100000, 0.04, 7, 0.006)
@@ -509,8 +547,11 @@ def build_variables() -> tuple[pd.DataFrame, dict]:
 # Laskenta
 # ----------------------------------------------------------------------------
 def compute(frame: pd.DataFrame, meta: dict):
-    # Täytetään harvat sarjat eteenpäin enintään 4 kk (neljännesvuosidata, viiveet)
-    filled = frame.ffill(limit=4)
+    # Täytetään harvat sarjat eteenpäin enintään 7 kk. Neljännesvuosidata (Z.1, BIS)
+    # raportoidaan 1–2 neljänneksen viiveellä, joten lyhyempi raja jättäisi tuoreimman
+    # kuukauden tyhjäksi. Kaikki tässä täytettävät ovat hitaita taso-/suhdemuuttujia,
+    # joten arvon kantaminen eteenpäin neljänneksen on vakiokäytäntö.
+    filled = frame.ffill(limit=7)
 
     pct = pd.DataFrame(index=filled.index)
     z = pd.DataFrame(index=filled.index)
@@ -590,7 +631,30 @@ def interpret(x: float) -> str:
     return "Historiallinen ääri"
 
 
-def make_report(asof, comp, pillars, coverage, extreme, cov, pct, meta, ana, hist):
+def na_reasons(frame: pd.DataFrame, pct_asof: pd.Series, asof: pd.Timestamp) -> dict:
+    """Selittää jokaiselle n/a-muuttujalle, miksi arvoa ei ole: vanhentunut data vai liian lyhyt historia."""
+    out = {}
+    for k in pct_asof.index:
+        if pd.notna(pct_asof[k]) or k not in frame.columns:
+            continue
+        s = frame[k].dropna()
+        if s.empty:
+            out[k] = "ei dataa"
+            continue
+        lv = s.index[-1]
+        lag = (asof.year - lv.year) * 12 + (asof.month - lv.month)
+        n = len(s)
+        if n < MIN_HISTORY_MONTHS:
+            out[k] = f"historia {n} kk < {MIN_HISTORY_MONTHS} kk"
+        elif lag > 7:
+            out[k] = f"viimeisin data {lv.date()}, {lag} kk vanha"
+        else:
+            out[k] = f"viimeisin data {lv.date()}"
+    return out
+
+
+def make_report(asof, comp, pillars, coverage, extreme, cov, pct, meta, ana, hist, reasons=None):
+    reasons = reasons or {}
     today = dt.date.today()
     week = today.isocalendar()[1]
     prev = None
@@ -617,7 +681,8 @@ def make_report(asof, comp, pillars, coverage, extreme, cov, pct, meta, ana, his
         v = pct[k]
         bar = "" if pd.isna(v) else "#" * int(v // 10)
         vs = "  n/a" if pd.isna(v) else f"{v:5.0f}"
-        lines.append(f"  {k} {meta[k]['name']:<48}{vs}  {bar}")
+        why = f"  ({reasons[k]})" if pd.isna(v) and k in reasons else ""
+        lines.append(f"  {k} {meta[k]['name']:<48}{vs}  {bar}{why}")
     lines.append("")
     if ana:
         lines.append("ANALOGIA (mitä historiallista huippua nykytila muistuttaa)")
@@ -711,8 +776,9 @@ def main():
     ana = analogs(z, meta, asof)
     hist = load_history()
 
+    reasons = na_reasons(frame, pct.loc[asof], asof)
     report = make_report(asof, comp, pillars.loc[asof], coverage.loc[asof], float(extreme.loc[asof]),
-                         float(cov.loc[asof]), pct.loc[asof], meta, ana, hist)
+                         float(cov.loc[asof]), pct.loc[asof], meta, ana, hist, reasons)
     print(report)
 
     os.makedirs(OUT_DIR, exist_ok=True)
