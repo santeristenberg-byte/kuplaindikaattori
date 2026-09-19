@@ -84,7 +84,7 @@ FINRA_URL = "https://www.finra.org/investors/learn-to-invest/advanced-investing/
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 HTTP_RETRIES = 3
 
-VERSION = "v0.6 (2026-09-19: FINRA-Excel-lukija)"
+VERSION = "v0.7 (2026-09-19: rivipuskurointi + suojattu email/kaavio, FINRA-haku ohitus)"
 
 DEMO = False
 WARNINGS: list[str] = []
@@ -484,9 +484,14 @@ def fetch_finra_margin() -> pd.Series:
     if DEMO:
         return demo_series("1997-01-01", 100000, 0.04, 7, 0.006)
 
+    # Jos siemen/välimuisti jo kattaa viime kuukauden, ei yritetä verkkohakua lainkaan:
+    # FINRA torjuu robotit (403), joten haku vain hidastaisi ja tuottaisi turhan varoituksen.
+    if not cache.empty and cache.dropna().index.max() >= (pd.Timestamp(dt.date.today()) - pd.Timedelta(days=40)):
+        return to_monthly(cache)
+
     fresh = pd.Series(dtype=float)
     try:
-        r = http_get(FINRA_URL)
+        r = http_get(FINRA_URL, retries=1)
         tables = pd.read_html(io.StringIO(r.text))
         for t in tables:
             cols = [str(c).lower() for c in t.columns]
@@ -838,6 +843,14 @@ def send_email(subject: str, body: str, attachment: str | None):
 # ----------------------------------------------------------------------------
 def main():
     global DEMO
+    # Rivipuskurointi: raportti näkyy Actions-lokissa heti oikeassa järjestyksessä
+    # varoitusten kanssa, eikä katoa puskuriin jos jokin myöhemmin kaatuu.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except Exception:  # noqa: BLE001
+        pass
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", action="store_true", help="synteettinen data, ei verkkohakuja")
     ap.add_argument("--no-email", action="store_true")
@@ -862,14 +875,18 @@ def main():
     reasons = na_reasons(frame, pct.loc[asof], asof)
     report = make_report(asof, comp, pillars.loc[asof], coverage.loc[asof], float(extreme.loc[asof]),
                          float(cov.loc[asof]), pct.loc[asof], meta, ana, hist, reasons)
-    print(report)
+    print("\n" + report + "\n", flush=True)   # flush: raportti varmasti lokiin ennen mitään myöhempää
 
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(REPORT_TXT, "w", encoding="utf-8") as f:
         f.write(report)
+
+    # Kaavio, historian tallennus ja sähköposti eivät saa kaataa ajoa niin, että raportti
+    # jää saamatta — raportti on jo tulostettu ja tallennettu yllä. Jokainen vaihe erikseen suojattu.
     try:
         make_chart(composite, extreme)
     except Exception:  # noqa: BLE001
+        print("VAROITUS: kaavion piirto epäonnistui:", flush=True)
         traceback.print_exc()
 
     # Historia
@@ -883,12 +900,16 @@ def main():
         "analogi": ana[0]["name"] if ana else "",
         "analogi_pct": round(ana[0]["score"], 1) if ana else np.nan,
     }
-    hist = pd.concat([hist, pd.DataFrame([row])], ignore_index=True)
-    os.makedirs(DATA_DIR, exist_ok=True)
-    hist.to_csv(HISTORY_CSV, index=False)
-    # Koko kuukausisarja talteen omien analyysien pohjaksi
-    pd.concat([pct.add_prefix("pct_"), pillars.add_prefix("pilari_"), composite.rename("kuplariski")], axis=1)\
-        .to_csv(os.path.join(DATA_DIR, "kuplariski_kuukausittain.csv"))
+    try:
+        hist = pd.concat([hist, pd.DataFrame([row])], ignore_index=True)
+        os.makedirs(DATA_DIR, exist_ok=True)
+        hist.to_csv(HISTORY_CSV, index=False)
+        # Koko kuukausisarja talteen omien analyysien pohjaksi
+        pd.concat([pct.add_prefix("pct_"), pillars.add_prefix("pilari_"), composite.rename("kuplariski")], axis=1)\
+            .to_csv(os.path.join(DATA_DIR, "kuplariski_kuukausittain.csv"))
+    except Exception:  # noqa: BLE001
+        print("VAROITUS: historian tallennus epäonnistui:", flush=True)
+        traceback.print_exc()
 
     # Sähköposti
     prev_comp = hist.iloc[-2]["kuplariski"] if len(hist) >= 2 else None
@@ -901,7 +922,11 @@ def main():
     elif comp >= ALERT_THRESHOLD:
         subject = "⚠ " + subject
     if not args.no_email and not DEMO:
-        send_email(subject, report, CHART_PNG)
+        try:
+            send_email(subject, report, CHART_PNG)
+        except Exception:  # noqa: BLE001
+            print("VAROITUS: sähköpostin lähetys epäonnistui (raportti on silti yllä ja tallennettu):", flush=True)
+            traceback.print_exc()
 
 
 if __name__ == "__main__":
