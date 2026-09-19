@@ -17,6 +17,7 @@ Ajo:  python kupla.py            (oikea data + sähköposti, jos ympäristömuut
 import argparse
 import datetime as dt
 import io
+import json
 import os
 import smtplib
 import sys
@@ -84,10 +85,11 @@ FINRA_URL = "https://www.finra.org/investors/learn-to-invest/advanced-investing/
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 HTTP_RETRIES = 3
 
-VERSION = "v0.7 (2026-09-19: rivipuskurointi + suojattu email/kaavio, FINRA-haku ohitus)"
+VERSION = "v0.9 (2026-09-19: faktapaketti uutiskirjeelle, B7 3 v)"
 
 DEMO = False
 WARNINGS: list[str] = []
+FACTS: dict = {}   # uutiskirjeen faktapaketin raakatasot (täytetään build_variablesissa)
 
 
 def warn(msg: str) -> None:
@@ -517,6 +519,23 @@ def fetch_finra_margin() -> pd.Series:
     return to_monthly(merged)
 
 
+def _peak(series: pd.Series, start: str, end: str) -> dict | None:
+    """Sarjan huippuarvo ja sen kuukausi annetulla aikavälillä (uutiskirjeen vertailuja varten)."""
+    w = series.loc[start:end].dropna()
+    if w.empty:
+        return None
+    return {"arvo": round(float(w.max()), 1), "kk": str(w.idxmax().date())[:7]}
+
+
+def _last(series, decimals=2) -> dict | None:
+    if series is None:
+        return None
+    s = series.dropna()
+    if s.empty:
+        return None
+    return {"arvo": round(float(s.iloc[-1]), decimals), "kk": str(s.index[-1].date())[:7]}
+
+
 def safe(fn, *args, **kw):
     """Suorittaa datahaun; virheessä palauttaa None ja kirjaa varoituksen."""
     try:
@@ -577,6 +596,8 @@ def build_variables() -> tuple[pd.DataFrame, dict]:
         real_yield = None
         if dfii is not None:
             real_yield = dfii
+        FACTS["usa_10v_korko_pct"] = _last(dgs10)
+        FACTS["usa_10v_reaalikorko_pct"] = _last(dfii)
         if dgs10 is not None and infl10 is not None:
             proxy = (dgs10 - infl10.reindex(dgs10.index)).dropna()
             real_yield = proxy if real_yield is None else real_yield.combine_first(proxy)
@@ -591,6 +612,18 @@ def build_variables() -> tuple[pd.DataFrame, dict]:
 
     # --- Pilari B: vipu & likviditeetti -------------------------------------
     md = safe(fetch_finra_margin)
+    if md is not None and not md.dropna().empty:
+        mdd = md.dropna()
+        yoy = (mdd / mdd.shift(12) - 1) * 100
+        FACTS["margin_debt"] = {
+            "taso_mrd_usd": round(float(mdd.iloc[-1]) / 1000, 1),
+            "kk": str(mdd.index[-1].date())[:7],
+            "kasvu_12kk_pct": round(float(yoy.dropna().iloc[-1]), 1) if yoy.notna().any() else None,
+            "kasvun_huippu_1999_2000": _peak(yoy, "1999-01", "2000-12"),
+            "kasvun_huippu_2020_2021": _peak(yoy, "2020-06", "2021-12"),
+            "tason_ennatys_mrd_usd": round(float(mdd.max()) / 1000, 1),
+            "tason_ennatys_kk": str(mdd.idxmax().date())[:7],
+        }
     if md is not None and gdp is not None:
         g = gdp.reindex(md.index.union(gdp.index)).ffill().reindex(md.index)
         add("B1", "Margin debt / BKT", "B", md / g)
@@ -614,18 +647,26 @@ def build_variables() -> tuple[pd.DataFrame, dict]:
             liq = liq.add((boj * 100 / jpy.reindex(boj.index).ffill()).reindex(liq.index).ffill(), fill_value=0)
         add("B4", "Keskuspankkilikviditeetti, 12 kk muutos (Fed+EKP+BoJ)", "B", np.log(liq / liq.shift(12)))
 
-    hy = safe(fetch_fred, "BAMLH0A0HYM2")
-    add("B5", "High yield -luottomarginaali", "B", hy, invert=True)
+    # Luottomarginaali. HUOM: ICE BofA HY OAS (BAMLH0A0HYM2) rajoitettiin FRED:ssä 4/2026
+    # alkaen vain 3 vuoteen, joten se ei riitä persentiilihistoriaan. Käytetään Moody's Baa −
+    # 10v -marginaalia (BAA10Y): päivittäin 1986→, rajoittamaton, kattaa 2000 ja 2007 huiput.
+    hy = safe(fetch_fred, "BAA10Y")
+    if hy is None or hy.dropna().empty:
+        hy = safe(fetch_fred, "BAMLH0A0HYM2")  # varasarja, jos BAA10Y ei jostain syystä vastaa
+    add("B5", "Luottomarginaali (Moody's Baa − 10v)", "B", hy, invert=True)
 
     ff = safe(fetch_fred, "FEDFUNDS")
     pce = safe(fetch_fred, "PCEPILFE")
+    FACTS["fed_ohjauskorko_pct"] = _last(ff)
+    if pce is not None:
+        FACTS["pohjainflaatio_pce_12kk_pct"] = _last(pce.pct_change(12) * 100, 1)
     if ff is not None and pce is not None:
         add("B6", "Reaalinen ohjauskorko", "B", ff - pce.pct_change(12).reindex(ff.index) * 100, invert=True)
 
     debt = safe(fetch_fred, "QUSPAM770A")     # yksityinen velka / BKT (BIS)
     if debt is not None:
         # BIS julkaisee 2–3 neljänneksen viiveellä; hidas muuttuja, joten 12 kk kantaminen on ok
-        add("B7", "Yksityisen velan/BKT 3 v muutos", "B", debt - debt.shift(12), ffill=12)
+        add("B7", "Yksityisen velan/BKT 3 v muutos", "B", debt - debt.shift(36), ffill=12)
 
     frame = pd.DataFrame(vars_).sort_index()
     return frame, meta
@@ -841,6 +882,133 @@ def send_email(subject: str, body: str, attachment: str | None):
 
 
 # ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# Faktapaketti uutiskirjeelle (outputs/latest.json)
+# ----------------------------------------------------------------------------
+LATEST_JSON = os.path.join(OUT_DIR, "latest.json")
+
+# Lukijalle esitettävät teemat: pilarien muuttujat ryhmiteltynä ymmärrettäviksi kokonaisuuksiksi.
+# Kun pilarit C–E lisätään, niille lisätään omat teemansa tähän.
+THEMES = {
+    "arvostus":  {"nimi": "Arvostus",      "muuttujat": ["A1", "A4", "A6", "A8"]},
+    "velkavipu": {"nimi": "Velkavipu",     "muuttujat": ["B1", "B2"]},
+    "raha":      {"nimi": "Raha ja velka", "muuttujat": ["B3", "B4", "B5", "B6", "B7"]},
+}
+
+# Raaka-arvon muunnos lukijalle ymmärrettävään yksikköön: (muunnos, yksikkö, desimaalit)
+DISPLAY = {
+    "A1": (lambda x: x, "kertaa 10 vuoden keskitulos", 1),
+    "A4": (lambda x: x * 100, "% BKT:sta (Wilshire 5000 / BKT, likiarvo)", 0),
+    "A6": (lambda x: x, "%-yksikköä", 2),
+    "A8": (lambda x: x, "Q-luku", 2),
+    "B1": (lambda x: x * 0.1, "% BKT:sta", 2),
+    "B2": (lambda x: (np.exp(x) - 1) * 100, "% / 12 kk", 1),
+    "B3": (lambda x: x, "% / 12 kk inflaatiokorjattuna", 1),
+    "B4": (lambda x: (np.exp(x) - 1) * 100, "% / 12 kk", 1),
+    "B5": (lambda x: x, "%-yksikköä", 2),
+    "B6": (lambda x: x, "%", 2),
+    "B7": (lambda x: x, "%-yksikköä / 3 v", 1),
+}
+
+
+def status_label(score) -> tuple[str, str]:
+    """Tilan nimi ja taso (good/warning/serious/critical) 0–100-lukemalle."""
+    if score is None or pd.isna(score):
+        return ("Ei dataa", "none")
+    if score >= 90:
+        return ("Äärimmäinen", "critical")
+    if score >= 75:
+        return ("Korkea", "serious")
+    if score >= 40:
+        return ("Koholla", "warning")
+    return ("Rauhallinen", "good")
+
+
+def _years_to_ranges(years: list[int]) -> str:
+    """[1999, 2000, 2007] -> '1999–2000, 2007'"""
+    if not years:
+        return ""
+    out, start, prev = [], years[0], years[0]
+    for y in years[1:]:
+        if y == prev + 1:
+            prev = y
+            continue
+        out.append(f"{start}–{prev}" if start != prev else f"{start}")
+        start = prev = y
+    out.append(f"{start}–{prev}" if start != prev else f"{start}")
+    return ", ".join(out)
+
+
+def export_latest(frame, meta, pct, pillars, composite, cov, extreme, ana, asof, reasons) -> dict:
+    """Kirjoittaa uutiskirjeen faktapaketin. Kaikki 'ennätys'-väitteet lasketaan tässä datasta,
+    jotta kirjoittaja (AI tai pohja) ei voi pyöristää 99,6:tta ennätykseksi."""
+    variables = {}
+    for k in meta:
+        f, unit, dec = DISPLAY.get(k, (lambda x: x, "", 2))
+        s = frame[k].ffill(limit=meta[k].get("ffill", 7)).loc[:asof].dropna()
+        p = pct.loc[asof, k] if k in pct.columns else np.nan
+        entry = {
+            "nimi": meta[k]["name"],
+            "pilari": meta[k]["pillar"],
+            "persentiili": None if pd.isna(p) else round(float(p), 1),
+            "kuplamaisempi_kun_pienempi": bool(meta[k]["invert"]),
+            "yksikko": unit,
+        }
+        if k in reasons:
+            entry["puuttumisen_syy"] = reasons[k]
+        if not s.empty:
+            cur, hist = s.iloc[-1], s.iloc[:-1]
+            if meta[k]["invert"]:
+                more = hist[hist < cur]
+                ext = (hist.min(), hist.idxmin()) if not hist.empty else (None, None)
+            else:
+                more = hist[hist > cur]
+                ext = (hist.max(), hist.idxmax()) if not hist.empty else (None, None)
+            entry.update({
+                "arvo": round(float(f(cur)), dec),
+                "arvon_kk": str(s.index[-1].date())[:7],
+                "historia_alkaa": int(s.index[0].year),
+                "on_ennatys": bool(len(more) == 0),
+                "kuplamaisempi_kuin_nyt_vuosina": _years_to_ranges(sorted({d.year for d in more.index})),
+                "historian_kuplamaisin_arvo": None if ext[0] is None else round(float(f(ext[0])), dec),
+                "historian_kuplamaisin_kk": None if ext[1] is None else str(ext[1].date())[:7],
+            })
+        variables[k] = entry
+
+    themes = {}
+    for tk, t in THEMES.items():
+        keys = [k for k in t["muuttujat"] if k in pct.columns and pd.notna(pct.loc[asof, k])]
+        sc = round(float(np.mean([pct.loc[asof, k] for k in keys])), 1) if keys else None
+        lab, lvl = status_label(sc)
+        themes[tk] = {"nimi": t["nimi"], "pisteet": sc, "tila": lab, "taso": lvl, "muuttujat": keys}
+
+    comp = float(composite.loc[asof])
+    out = {
+        "versio": VERSION,
+        "luotu_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "datan_kk": str(asof.date())[:7],
+        "kuplalukema": round(comp, 1),
+        "vyohyke": interpret(comp),
+        "taso": status_label(comp)[1],
+        "kattavuus_pct": round(float(cov.loc[asof]) * 100, 1),
+        "aariarvojen_osuus_pct": round(float(extreme.loc[asof]) * 100, 1),
+        "pilarit": {p: {"nimi": PILLAR_NAMES[p], "paino": PILLAR_WEIGHTS[p],
+                        "pisteet": None if pd.isna(pillars.loc[asof, p]) else round(float(pillars.loc[asof, p]), 1)}
+                    for p in PILLAR_WEIGHTS},
+        "teemat": themes,
+        "muuttujat": variables,
+        "analogiat": [{"huippu": a["name"], "samankaltaisuus_pct": round(a["score"]),
+                       "yhteisia_muuttujia": a["n"], "samankaltaisinta": a["similar"],
+                       "erilaisinta": a["different"]} for a in ana],
+        "raakatasot": FACTS,
+        "varoitukset": WARNINGS,
+    }
+    os.makedirs(OUT_DIR, exist_ok=True)
+    with open(LATEST_JSON, "w", encoding="utf-8") as fh:
+        json.dump(out, fh, ensure_ascii=False, indent=1, default=str)
+    return out
+
+
 def main():
     global DEMO
     # Rivipuskurointi: raportti näkyy Actions-lokissa heti oikeassa järjestyksessä
@@ -880,6 +1048,12 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(REPORT_TXT, "w", encoding="utf-8") as f:
         f.write(report)
+    try:
+        export_latest(frame, meta, pct, pillars, composite, cov, extreme, ana, asof, reasons)
+        print(f"Faktapaketti uutiskirjeelle: {LATEST_JSON}", flush=True)
+    except Exception:  # noqa: BLE001
+        print("VAROITUS: faktapaketin (latest.json) vienti epäonnistui:", flush=True)
+        traceback.print_exc()
 
     # Kaavio, historian tallennus ja sähköposti eivät saa kaataa ajoa niin, että raportti
     # jää saamatta — raportti on jo tulostettu ja tallennettu yllä. Jokainen vaihe erikseen suojattu.
