@@ -84,7 +84,7 @@ FINRA_URL = "https://www.finra.org/investors/learn-to-invest/advanced-investing/
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 HTTP_RETRIES = 3
 
-VERSION = "v0.5 (2026-09-18: FRED pisin reitti voittaa + välimuisti ei lyhene)"
+VERSION = "v0.6 (2026-09-19: FINRA-Excel-lukija)"
 
 DEMO = False
 WARNINGS: list[str] = []
@@ -385,38 +385,89 @@ def _shiller_from_multpl() -> pd.DataFrame:
     return df.sort_index()
 
 
-def _read_margin_seed() -> pd.Series:
-    """Lukee käyttäjän repoon tallentaman FINRA-siemendatan (data/finra_margin_seed.csv).
+def _parse_seed_dates(raw: pd.Series) -> pd.Series:
+    """Tulkitsee kuukausisarakkeen monessa muodossa: 2024-03, 03/2024, Mar-24, Mar 2024, jne."""
+    d = pd.Series(pd.NaT, index=raw.index)
+    for fmt in ("%b-%y", "%b-%Y", "%b %Y", "%B %Y", "%B-%Y", "%m/%Y", "%Y-%m", "%Y-%m-%d", "%m/%d/%Y"):
+        miss = d.isna()
+        if miss.any():
+            d[miss] = pd.to_datetime(raw[miss], format=fmt, errors="coerce")
+    miss = d.isna()
+    if miss.any():
+        d[miss] = pd.to_datetime(raw[miss], errors="coerce")
+    return d
 
-    Muoto: kaksi saraketta, otsikkorivi vapaa. Ensimmäinen = kuukausi, toinen = margin debt.
-    Kuukausi voi olla muodossa 2024-03, 03/2024, Mar-24 tai Mar 2024. Luvut voivat sisältää
-    pilkkuja tai dollarimerkkejä. Tämä on tarkoitettu kertaluonteiseksi historian syötöksi,
-    koska FINRA:n sivu torjuu automaattiset haut (403)."""
-    for name in ("finra_margin_seed.csv", "finra_margin_seed.xlsx"):
+
+def _read_margin_seed() -> pd.Series:
+    """Lukee FINRA-margin debtin repoon tallennetusta tiedostosta.
+
+    Kaksi tuettua tapaa:
+      1) FINRA:n virallinen Excel (data/finra_margin_seed.xlsx tai margin-statistics.xlsx),
+         jonka voi ladata selaimella osoitteesta
+         finra.org/sites/default/files/2021-03/margin-statistics.xlsx — koko historia 1997→.
+         Lukija etsii otsikkorivin, "Debit"-sarakkeen ja kuukausisarakkeen automaattisesti.
+      2) Yksinkertainen kahden sarakkeen CSV (data/finra_margin_seed.csv): kuukausi, margin debt.
+    Tarpeen, koska FINRA:n sivu torjuu automaattiset haut (403)."""
+    candidates = ["finra_margin_seed.xlsx", "margin-statistics.xlsx", "finra_margin_seed.csv"]
+    for name in candidates:
         p = os.path.join(DATA_DIR, name)
         if not os.path.exists(p):
             continue
         try:
-            df = pd.read_excel(p, header=None) if name.endswith("xlsx") else pd.read_csv(p, header=None)
-            df = df.iloc[:, :2].dropna()
-            raw = df.iloc[:, 0].astype(str).str.strip()
-            # Täsmälliset muodot ensin (yksiselitteisiä), yleinen arvaus vasta viimeisenä
-            d = pd.Series(pd.NaT, index=raw.index)
-            for fmt in ("%b-%y", "%b-%Y", "%b %Y", "%B %Y", "%m/%Y", "%Y-%m", "%Y-%m-%d"):
-                miss = d.isna()
-                if miss.any():
-                    d[miss] = pd.to_datetime(raw[miss], format=fmt, errors="coerce")
-            miss = d.isna()
-            if miss.any():
-                d[miss] = pd.to_datetime(raw[miss], errors="coerce")
-            v = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
-            s = pd.Series(v.values, index=d.values).dropna()
-            s = s[s.index.notna()]
-            if not s.empty:
-                return to_monthly(s)
+            raw_df = pd.read_excel(p, header=None) if name.endswith("xlsx") else pd.read_csv(p, header=None)
+            s = _extract_margin(raw_df)
+            if s is not None and not s.empty:
+                return s
+            warn(f"FINRA-siementiedostosta {name} ei löytynyt margin debt -saraketta")
         except Exception as e:  # noqa: BLE001
             warn(f"FINRA-siementiedostoa {name} ei voitu lukea: {e}")
     return pd.Series(dtype=float)
+
+
+def _extract_margin(raw_df: pd.DataFrame) -> pd.Series | None:
+    """Poimii kuukausi + debit balance mistä tahansa taulukkomuodosta (FINRA-xlsx tai oma CSV)."""
+    # Etsi otsikkorivi, jolla on "debit" jossain solussa
+    header_row = None
+    for i in range(min(15, len(raw_df))):
+        cells = [str(v).lower() for v in raw_df.iloc[i].tolist()]
+        if any("debit" in c for c in cells):
+            header_row = i
+            break
+
+    if header_row is not None:
+        hdr = [str(v).strip() for v in raw_df.iloc[header_row].tolist()]
+        low = [h.lower() for h in hdr]
+        debit_col = next(j for j, h in enumerate(low) if "debit" in h)
+        # Kuukausisarake: ensin erilliset Year + Month (jos molemmat bare-sarakkeina),
+        # sitten yhdistetty "year-month"/"date"/"period", viimeisenä ensimmäinen sarake.
+        ycol = next((j for j, h in enumerate(low) if h.strip() in ("year", "yr")), None)
+        mcol = next((j for j, h in enumerate(low) if h.strip() in ("month", "mo", "mon")), None)
+        combo_col = next((j for j, h in enumerate(low)
+                          if any(k in h for k in ("year-month", "yearmonth", "date", "period"))
+                          or ("month" in h and "-" in h)), None)
+        body = raw_df.iloc[header_row + 1:]
+        if ycol is not None and mcol is not None:
+            combo = (body.iloc[:, ycol].astype(str).str.strip().str.replace(r"\.0$", "", regex=True) + "-"
+                     + body.iloc[:, mcol].astype(str).str.strip().str.replace(r"\.0$", "", regex=True))
+            d = _parse_seed_dates(combo)
+        elif combo_col is not None:
+            d = _parse_seed_dates(body.iloc[:, combo_col].astype(str).str.strip())
+        elif mcol is not None:
+            d = _parse_seed_dates(body.iloc[:, mcol].astype(str).str.strip())
+        else:
+            d = _parse_seed_dates(body.iloc[:, 0].astype(str).str.strip())
+        v = pd.to_numeric(body.iloc[:, debit_col].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
+    else:
+        # Ei "debit"-otsikkoa → oletetaan yksinkertainen kahden sarakkeen CSV (kuukausi, luku)
+        df = raw_df.iloc[:, :2].dropna(how="all")
+        d = _parse_seed_dates(df.iloc[:, 0].astype(str).str.strip())
+        v = pd.to_numeric(df.iloc[:, 1].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
+
+    s = pd.Series(v.values, index=d.values).dropna()
+    s = s[s.index.notna()]
+    if s.empty:
+        return None
+    return to_monthly(s)
 
 
 def fetch_finra_margin() -> pd.Series:
