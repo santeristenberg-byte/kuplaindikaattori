@@ -2,15 +2,16 @@ name: Kuplaindikaattori
 
 on:
   schedule:
-    - cron: "0 5 * * 1"     # maanantaisin klo 05:00 UTC (08:00 kesäaikaa / 07:00 talviaikaa)
-  workflow_dispatch:         # sallii myös käsin käynnistyksen Actions-välilehdeltä
+    - cron: "0 6 * * 6"     # lauantaisin 06:00 UTC = klo 9 kesäaikaan, klo 8 talviaikaan
+  workflow_dispatch:         # käsin käynnistys: Actions → Kuplaindikaattori → Run workflow
 
 permissions:
-  contents: write            # bot saa tallentaa historian repoon
+  contents: write            # bot saa tallentaa historian ja arkiston repoon
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -21,18 +22,28 @@ jobs:
       - name: Asenna kirjastot
         run: pip install -r requirements.txt
 
-      - name: Aja indikaattori ja lähetä raportti
+      - name: Laske kuplamittari
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python kupla.py --no-email
+
+      - name: Kirjoita ja lähetä uutiskirje
+        if: always()           # ajetaan myös jos laskenta kaatui: silloin tulee virheilmoitus
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-        run: python kupla.py
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LIITA_RAPORTTI: "1"  # tekninen raportti liitteeksi; aseta "0" kun kirje lähtee muillekin
+          # TUTKA_ILMOITUS: "Laatija omistaa ..."   # eturistiriitailmoitus ennen kaupallista jakelua
+        run: python newsletter.py
 
       - name: Tallenna historia repoon
+        if: always()
         run: |
           git config user.name "kupla-bot"
           git config user.email "kupla-bot@users.noreply.github.com"
-          git add data outputs
+          git add data outputs newsletter
           git commit -m "Viikkoajo $(date -u +%F)" || echo "Ei muutoksia"
           git push
