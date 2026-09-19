@@ -84,7 +84,7 @@ FINRA_URL = "https://www.finra.org/investors/learn-to-invest/advanced-investing/
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 HTTP_RETRIES = 3
 
-VERSION = "v0.4 (2026-09-18: FRED koko historia, B7 12 kk)"
+VERSION = "v0.5 (2026-09-18: FRED pisin reitti voittaa + välimuisti ei lyhene)"
 
 DEMO = False
 WARNINGS: list[str] = []
@@ -170,35 +170,64 @@ def fetch_fred(sid: str) -> pd.Series:
     if DEMO:
         return demo_series("1960-01-01", 100, 0.02, hash(sid) % 1000, 0.003)
 
-    errors = []
-    # 1) Virallinen API, jos avain on annettu (luotettavin)
+    # Strategia: kokeillaan reittejä ja pidetään PISIN tulos. Jokin reitti voi palauttaa
+    # päivittäisestä sarjasta vain lyhyen ikkunan; pisin voittaa, eikä lyhyt tulos
+    # koskaan pääse lyhentämään välimuistia. Riittävän pitkä (>= LONG_ENOUGH) lopettaa haun.
+    LONG_ENOUGH = 240  # kk
+    errors: list[str] = []
+    best: pd.Series | None = None
+    best_route = ""
+
+    def consider(s: pd.Series, route: str):
+        nonlocal best, best_route
+        n = int(s.notna().sum())
+        if s.empty or n == 0:
+            return
+        if best is None or n > int(best.notna().sum()):
+            best, best_route = s, route
+
+    # 1) Virallinen API, jos avain on annettu (luotettavin; pyydetään koko historia eksplisiittisesti)
     if FRED_API_KEY:
         try:
-            r = http_get(FRED_API.format(id=sid, key=FRED_API_KEY))
+            r = http_get(FRED_API.format(id=sid, key=FRED_API_KEY) + "&observation_start=1900-01-01&limit=100000")
             obs = r.json()["observations"]
-            s = pd.Series([o["value"] for o in obs], index=[o["date"] for o in obs])
-            s = to_monthly(s)
-            if not s.empty:
-                cache_save(sid, s)
-                return s
+            s = to_monthly(pd.Series([o["value"] for o in obs], index=[o["date"] for o in obs]))
+            consider(s, "api")
         except Exception as e:  # noqa: BLE001
-            errors.append(f"api: {e}")
-    # 2) Julkiset CSV/TXT-reitit
-    for pattern in FRED_URLS:
-        try:
-            r = http_get(pattern.format(id=sid), retries=2)
-            s = _parse_fred_text(r.text)
-            if not s.empty:
-                cache_save(sid, s)
-                return s
-        except Exception as e:  # noqa: BLE001
-            errors.append(str(e)[:120])
-    # 3) Välimuisti edellisestä onnistuneesta ajosta
-    c = cache_load(sid)
-    if c is not None and not c.empty:
-        warn(f"FRED {sid}: verkkohaku epäonnistui, käytetään välimuistia ({c.index[-1].date()} asti)")
-        return c
-    raise RuntimeError("; ".join(errors))
+            errors.append(f"api: {str(e)[:100]}")
+            warn(f"FRED {sid}: API-haku epäonnistui vaikka avain on asetettu — tarkista FRED_API_KEY ({str(e)[:80]})")
+
+    # 2) Julkiset CSV/TXT-reitit, kunnes joku antaa riittävän pitkän
+    if best is None or int(best.notna().sum()) < LONG_ENOUGH:
+        for pattern in FRED_URLS:
+            try:
+                r = http_get(pattern.format(id=sid), retries=2)
+                consider(_parse_fred_text(r.text), pattern.split("/")[3] if "/" in pattern else pattern)
+                if best is not None and int(best.notna().sum()) >= LONG_ENOUGH:
+                    break
+            except Exception as e:  # noqa: BLE001
+                errors.append(str(e)[:120])
+
+    # 3) Yhdistä välimuistiin: pidetään kaikki tunnettu historia, tuore voittaa päällekkäisillä
+    cached = cache_load(sid)
+    if best is None:
+        if cached is not None and not cached.empty:
+            warn(f"FRED {sid}: verkkohaku epäonnistui, käytetään välimuistia ({cached.index[-1].date()} asti)")
+            return cached
+        raise RuntimeError("; ".join(errors))
+
+    merged = best
+    if cached is not None and not cached.empty:
+        merged = pd.concat([cached, best])
+        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        merged = merged.resample("ME").last()
+    cache_save(sid, merged)
+
+    n = int(merged.notna().sum())
+    if n < MIN_HISTORY_MONTHS:
+        hint = "" if FRED_API_KEY else " — ilmainen FRED_API_KEY todennäköisesti korjaa tämän"
+        warn(f"FRED {sid}: vain {n} kk historiaa (reitti: {best_route}){hint}")
+    return merged
 
 
 def fetch_yahoo(ticker: str) -> pd.Series:
