@@ -1303,7 +1303,13 @@ def render_tutka(tv: dict, wk: dict) -> str:
         return _row(label("Tutka") + '<p class="ink-2" style="margin:8px 0 0;font-size:15px;color:#52514e;">'
                     'Tutkan ennusteet julkaistaan lauantain numerossa.</p>', 28)
     feat = tv.get("feat")
-    intro = (f'Ensi viikon ({fi_range(wk["ensi_alku"], wk["ensi_loppu"])}) nousuehdokkaat, sektorinäkymä ja kuplavaroitus. '
+    kinds = {p["tyyppi"] for p in picks}
+    # Kerro johdannossa vain se, mitä tällä viikolla oikeasti on jäädytetty – ei luvata sektorinäkymää,
+    # jos esim. sektori-ETF:ien dataa ei tällä kertaa saatu.
+    nimet = [n for k, n in (("nousu", "nousuehdokkaat"), ("sektori", "sektorinäkymä"), ("varoitus", "kuplavaroitus"))
+             if k in kinds]
+    lista = " ja ".join(nimet) if len(nimet) < 3 else f"{', '.join(nimet[:-1])} ja {nimet[-1]}"
+    intro = (f'Ensi viikon ({fi_range(wk["ensi_alku"], wk["ensi_loppu"])}) {lista}. '
              'Tulos lasketaan maanantain avauskurssista perjantain päätöskurssiin, eli juuri niin kuin lukija olisi '
              'voinut toimia. Tulokset ensi numerossa.')
     if tv.get("published") == "saanto":
@@ -1394,7 +1400,11 @@ def teaser(tv: dict | None) -> str:
         rows = tv["scorecard"]["rivit"]
         parts.append(f"tuloskortti ({sum(e['osuma'] for e in rows)}/{len(rows)} osui)")
     if tv and tv.get("picks"):
-        parts.append("tutkan uudet nousuehdokkaat, sektorinäkymä ja kuplavaroitus")
+        kinds = {p["tyyppi"] for p in tv["picks"]}
+        nimet = [n for k, n in (("nousu", "nousuehdokkaat"), ("sektori", "sektorinäkymä"), ("varoitus", "kuplavaroitus"))
+                 if k in kinds]
+        lista = " ja ".join(nimet) if len(nimet) < 3 else f"{', '.join(nimet[:-1])} ja {nimet[-1]}"
+        parts.append(f"tutkan uudet {lista}")
     parts += ["viikon nousijat", "kuplalukema lopussa"]
     return ("Tässä numerossa: " + " &middot; ".join(parts) + ".") if parts else ""
 
