@@ -4,9 +4,12 @@
   "numero": 1,
   "pvm": "2026-09-20",
   "kuplalukema": 83.4,
+  "vyohyke": "Kupla-alue",
+  "taso": "serious",
+  "otsikko": "S&P 500 laski 0,1 % – arvostus äärimmäinen",
   "kattavuus_pct": 100.0,
   "ai": null,
   "kustannus_usd": null,
-  "minuutti": "Buffett-indikaattori"
+  "minuutti": "CAPE eli Shillerin P/E-luku"
  }
 ]
