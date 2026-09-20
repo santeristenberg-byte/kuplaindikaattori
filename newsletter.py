@@ -429,6 +429,7 @@ SYSTEM_PROMPT = """Olet Kuplamittarin päätoimittaja. Kuplamittari on suomenkie
 
 TYYLI
 - Sujuvaa, elävää yleiskieltä kuin parhaalla talousjournalistilla. Lyhyitä virkkeitä. Selitä termi arkikielellä, kun käytät sitä ensimmäisen kerran (esim. CAPE = hinta suhteessa kymmenen vuoden keskimääräiseen tulokseen).
+- Kirjoita kuin syntyperäinen suomalainen toimittaja, ei kuin englannista käännetty teksti. Vältä käännösmäisiä lauserakenteita ja tekoälylle tyypillisiä kliseitä ja täytesanoja (esim. "on tärkeää huomata, että", "tämä osoittaa, että", jokaisen kappaleen aloittaminen sanalla "kuitenkin" tai "lisäksi"). Vaihtele lauserakennetta.
 - Tiivis: sähköpostiin menevät tekstikentät (kaikki paitsi syvasukellus) yhteensä noin 650–900 sanaa. Jokainen virke ansaitsee paikkansa.
 - Etsi viikon tarina ja kytke uutiset kuplariskiin. Historialliset rinnastukset tekevät kirjeestä kiinnostavan, mutta vain tosiasioihin perustuvina.
 - Suomalaiset merkintätavat: desimaalipilkku (5,0 %), välilyönti ennen %-merkkiä, tuhaterotin välilyönnillä (80 000), päivämäärät muodossa 23.9., ajatusviiva välimerkkinä.
@@ -514,15 +515,20 @@ def _post(body: dict) -> dict:
 
 
 def call_claude(system: str, user: str, model: str, max_searches: int = 0) -> tuple[str, dict, list[dict]]:
-    """Palauttaa (kaikki tekstit yhdistettynä, käyttötiedot, viitatut lähteet)."""
-    tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": max_searches or MAX_SEARCHES,
-              "user_location": {"type": "approximate", "country": "FI", "timezone": "Europe/Helsinki"}}]
+    """Palauttaa (kaikki tekstit yhdistettynä, käyttötiedot, viitatut lähteet). max_searches <= 0 jättää
+    verkkohaku-työkalun kokonaan pois käytöstä (esim. kielenhuoltokutsu, joka ei saa mennä hakemaan tietoa
+    itse eikä tarvitse siihen työkalua)."""
+    tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": max_searches,
+              "user_location": {"type": "approximate", "country": "FI", "timezone": "Europe/Helsinki"}}] \
+        if max_searches > 0 else []
     messages = [{"role": "user", "content": user}]
     usage = {"malli": model, "syote_tokenit": 0, "tuotos_tokenit": 0, "haut": 0}
     texts, cited = [], []
     for _ in range(6):                          # pause_turn-jatkot
-        data = _post({"model": model, "max_tokens": 8000, "system": system,
-                      "messages": messages, "tools": tools})
+        body = {"model": model, "max_tokens": 8000, "system": system, "messages": messages}
+        if tools:
+            body["tools"] = tools
+        data = _post(body)
         u = data.get("usage") or {}
         usage["syote_tokenit"] += int(u.get("input_tokens") or 0) + int(u.get("cache_read_input_tokens") or 0) \
             + int(u.get("cache_creation_input_tokens") or 0)
@@ -599,6 +605,90 @@ def ai_write(facts: dict) -> tuple[dict, dict]:
 
 
 # ----------------------------------------------------------------------------
+# Kielenhuolto: kolmas (hakuton) tekoälykutsu, joka hioo tekstin sujuvammaksi suomeksi
+# ----------------------------------------------------------------------------
+POLISH_SYSTEM = """Olet kokenut suomalainen talous- ja uutiskielen toimittaja. Saat JSON-objektin, jonka \
+tekstikentät toinen tekoäly on juuri kirjoittanut suomeksi sijoitusuutiskirjeeseen. Kirjoita jokainen \
+tekstikenttä uudelleen sujuvaksi, luontevaksi ja asiantuntevaksi suomeksi – sellaiseksi kuin kokenut \
+suomalainen toimittaja sen itse kirjoittaisi. Poista käännösmäisyys (ajatusten suora kääntyminen \
+englannista), tekoälylle tyypilliset kliseet ja toistorakenteet (esim. "on tärkeää huomata, että", \
+"tämä osoittaa, että", jokaisen kappaleen aloittaminen sanalla "kuitenkin" tai "lisäksi") ja jäykkä \
+lauserakenne. Tavoite on teksti, joka ei erotu ihmisen kirjoittamasta asiatekstistä.
+
+EHDOTTOMAT SÄÄNNÖT — näistä ei jousteta:
+- Älä muuta, lisää tai poista yhtään lukua, prosenttia, valuuttamäärää, päivämäärää, tikkeriä \
+(esim. NVDA), erisnimeä tai **lihavointimerkintää**. Niiden on pysyttävä täsmälleen samoina.
+- Älä muuta asiasisältöä, vain ilmaisutapaa. Pituuden on pysyttävä suunnilleen samana kenttäkohtaisesti.
+- Älä koske kenttiin "url" tai "tunnus" äläkä listaan "lahteet" – jätä ne täsmälleen ennalleen.
+- Älä lisää uutta tietoa äläkä väitteitä, joita alkuperäisessä tekstissä ei ollut.
+- Säilytä numeromerkintöjen muoto sellaisenaan: prosentti aina merkinnällä "%" (älä kirjoita sitä sanana \
+"prosenttia"), desimaalipilkku, sama päivämäärämuoto.
+- Palauta TÄSMÄLLEEN sama JSON-rakenne samoilla avaimilla kuin sait – muokkaa vain tekstiarvot, älä \
+avainten nimiä tai rakennetta."""
+
+_NUM_TOKEN_RE = re.compile(r'[+\-−]?\d[\d\s.,]*\s*%?')
+
+
+def _num_tokens(s) -> list:
+    """Poimii tekstistä kaikki numeeriset tunnisteet (luvut, prosentit) numerovarmistusta varten."""
+    return [t.strip() for t in _NUM_TOKEN_RE.findall(str(s or ""))]
+
+
+def _safe_polish_value(orig: str, new) -> str:
+    """Hyväksyy kielenhuolletun tekstin vain, jos siinä on täsmälleen samat luvut kuin alkuperäisessä
+    (järjestyksestä riippumatta) – muuten alkuperäinen säilyy sellaisenaan. Näin kielenhuolto ei koskaan
+    pääse hiljaa muuttamaan faktoja, vaikka koko idea on antaa tekoälylle vapaus muotoilla teksti uusiksi."""
+    if not isinstance(new, str) or not new.strip():
+        return orig
+    if sorted(_num_tokens(orig)) != sorted(_num_tokens(new)):
+        return orig
+    return new
+
+
+_POLISH_SKIP_KEYS = frozenset({"url", "tunnus", "lahteet"})
+
+
+def _merge_polish(orig, new):
+    """Yhdistää kielenhuolletun version alkuperäiseen: säilyttää JSON-rakenteen, ohittaa aina arat
+    kentät (url, tunnus, lahteet-lista) ja hyväksyy jokaisen tekstikentän erikseen vain jos luvut
+    täsmäävät (ks. _safe_polish_value). Rakenteen poiketessa (esim. listan pituus muuttunut) koko
+    kyseinen osa palautuu alkuperäiseen."""
+    if isinstance(orig, dict):
+        if not isinstance(new, dict):
+            return orig
+        return {k: (orig[k] if k in _POLISH_SKIP_KEYS else _merge_polish(v, new.get(k, v)))
+                for k, v in orig.items()}
+    if isinstance(orig, list):
+        if not isinstance(new, list) or len(new) != len(orig):
+            return orig
+        return [_merge_polish(o, n) for o, n in zip(orig, new)]
+    if isinstance(orig, str):
+        return _safe_polish_value(orig, new)
+    return orig
+
+
+def polish(obj: dict, keys: tuple, label: str) -> tuple[dict, dict]:
+    """Kolmas, hakuton tekoälykutsu, joka hioo edellisen kutsun tuottaman suomen sujuvammaksi ja vähemmän
+    käännösmäiseksi. Jokainen tekstikenttä hyväksytään vain, jos sen luvut täsmäävät alkuperäiseen – kieltä
+    parannetaan, mutta faktoja ei koskaan riskeerata. Jos kutsu epäonnistuu kaikilla malleilla, alkuperäinen
+    obj palautuu muuttumattomana eikä koko kirjettä kaadeta tämän vuoksi. Palauttaa (obj, käyttötiedot)."""
+    if not obj:
+        return obj, {}
+    user = ('Hio tämän JSON-objektin tekstikentät edellä kuvattujen sääntöjen mukaan. Palauta AINOASTAAN '
+            'JSON ilman muuta tekstiä.\n```json\n' + json.dumps(obj, ensure_ascii=False, indent=1) + '\n```')
+    for model in [MODEL] + ([FALLBACK_MODEL] if FALLBACK_MODEL != MODEL else []):
+        try:
+            text, usage, _ = call_claude(POLISH_SYSTEM, user, model, 0)
+            new_obj = extract_json(text, keys)
+            print(f"AI ({label}, kielenhuolto): {usage['malli']}, {usage['syote_tokenit']} + "
+                  f"{usage['tuotos_tokenit']} tokenia, n. {usage['kustannus_usd']} $", flush=True)
+            return _merge_polish(obj, new_obj), usage
+        except Exception as e:  # noqa: BLE001
+            warn(f"kielenhuolto ({label}, {model}) epäonnistui, käytetään hiomatonta tekstiä: {str(e)[:200]}")
+    return obj, {}
+
+
+# ----------------------------------------------------------------------------
 # Tutka: toinen AI-kutsu (itsearvio, oppi, nousuehdokkaat, sektorinäkymä ja kuplavaroitus)
 # ----------------------------------------------------------------------------
 TUTKA_KEYS = ("itsearvio", "uusi_oppi", "ehdokkaat", "varoitus", "sektorinakyma")
@@ -623,6 +713,7 @@ SÄÄNNÖT
 - Käytä vain tietoja, jotka löydät luotettavista lähteistä tai faktapaketista. Älä keksi päivämääriä tai lukuja.
 - Ei sijoitusneuvontaa eikä kehotuksia ostaa tai myydä.
 - Suomalaiset merkintätavat: desimaalipilkku ja välilyönti ennen %-merkkiä.
+- Kirjoita kuin syntyperäinen suomalainen analyytikko, ei kuin englannista käännetty teksti. Vältä käännösmäisyyttä ja tekoälyn tyypillisiä kliseitä.
 
 VASTAUS
 Tee ensin verkkohaut. Palauta lopuksi AINOASTAAN yksi JSON-objekti ilman muuta tekstiä sen jälkeen:
@@ -778,6 +869,9 @@ def run_tutka(args, facts: dict, tk: dict, wk: dict, number: int, week_key: str,
         elif not args.no_ai and API_KEY and run_date.weekday() >= 5:
             try:
                 tobj, usage = ai_tutka(tutka_factpack(facts, tk, wk, number, sc))
+                if tobj:
+                    tobj, usage_p = polish(tobj, TUTKA_KEYS, "tutka")
+                    usage["kustannus_usd"] = round((usage.get("kustannus_usd") or 0) + (usage_p.get("kustannus_usd") or 0), 3)
             except Exception as e:  # noqa: BLE001
                 warn(f"tutkan AI-kutsu epäonnistui, käytetään momentum-sääntöä: {str(e)[:200]}")
         ai_picks = validate_picks(tobj, tk["uni"]) if tobj else []
@@ -1851,6 +1945,9 @@ def main() -> int:
         elif not args.no_ai and API_KEY:
             try:
                 ai_obj, usage = ai_write(facts)
+                if ai_obj:
+                    ai_obj, usage_p = polish(ai_obj, EXPECTED_KEYS, "kirje")
+                    usage["kustannus_usd"] = round((usage.get("kustannus_usd") or 0) + (usage_p.get("kustannus_usd") or 0), 3)
             except Exception as e:  # noqa: BLE001
                 warn(f"AI-kirjoittaja ei onnistunut, käytetään ilmaista pohjaa: {str(e)[:200]}")
         elif not args.no_ai:
