@@ -974,8 +974,18 @@ def template_write(facts: dict) -> dict:
 # ----------------------------------------------------------------------------
 # Tarkistus ja yhdistäminen
 # ----------------------------------------------------------------------------
+# Tekoäly vuotaa joskus verkkohaun sisäisiä viittausmerkintöjä raakana tekstiin, esim.
+# (cite index="6-4,6-5">...</cite> tai <cite index="52-5">...</cite>. Nämä eivät ole
+# tarkoitettu lukijalle, joten ne siivotaan pois – sisällä oleva teksti säilytetään.
+_CITE_RE = re.compile(r'[(<]cite[^>]*>(.*?)</cite\s*>', re.IGNORECASE | re.DOTALL)
+_CITE_STRAY_RE = re.compile(r'[(<]/?cite[^>]*>', re.IGNORECASE)
+
+
 def _clean(s, maxlen: int) -> str:
-    s = re.sub(r"\s+", " ", str(s or "")).strip()
+    s = str(s or "")
+    s = _CITE_RE.sub(r"\1", s)
+    s = _CITE_STRAY_RE.sub("", s)          # varmuuden vuoksi pariton/rikkinäinen jäljelle jäänyt tagi
+    s = re.sub(r"\s+", " ", s).strip()
     if len(s) > maxlen:
         s = s[:maxlen].rsplit(" ", 1)[0].rstrip(",;:") + "…"
     return s
