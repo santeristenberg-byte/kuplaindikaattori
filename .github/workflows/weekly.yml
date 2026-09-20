@@ -35,7 +35,8 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          LIITA_RAPORTTI: "1"  # tekninen raportti liitteeksi; aseta "0" kun kirje lähtee muillekin
+          SITE_URL: ${{ secrets.SITE_URL }}   # esim. https://kayttaja.github.io/repo — ks. UUTISKIRJE.md, "Verkkosivu"
+          LIITA_RAPORTTI: "0"  # tekninen raportti liitteeksi; aseta "1" jos haluat sen taas vain itsellesi
           # TUTKA_ILMOITUS: "Laatija omistaa ..."   # eturistiriitailmoitus ennen kaupallista jakelua
         run: python newsletter.py
 
