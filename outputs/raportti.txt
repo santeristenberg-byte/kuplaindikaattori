@@ -1,6 +1,6 @@
 KUPLAINDIKAATTORI — viikko 38/2026   (data 2026-09-30)
 ================================================================
-KUPLARISKI        83.4 / 100   Kupla-alue  (+2.1 vs. edellinen ajo 2026-09-19)
+KUPLARISKI        83.4 / 100   Kupla-alue  (+0.0 vs. edellinen ajo 2026-09-20)
                  datan kattavuus 100 %
   Arvostus                 99.5   (paino 60 %, kattavuus 100 %)
   Vipu & likviditeetti     59.2   (paino 40 %, kattavuus 100 %)
@@ -27,6 +27,6 @@ ANALOGIA (mitä historiallista huippua nykytila muistuttaa)
   Samankaltaisinta (2021-11 Pandemiakupla): Buffett-indikaattori (Wilshire 5000 / BKT); Margin debtin 12 kk kasvu; Luottomarginaali (Moody's Baa − 10v)
   Erilaisinta:      Yksityisen velan/BKT 3 v muutos; Reaalinen ohjauskorko; Osakeriskipreemio (1/CAPE − reaalikorko)
 
-52 viikon vaihteluväli: 73–81
+52 viikon vaihteluväli: 73–83
 
 Vaihe 1: mukana pilarit A ja B. Pilarit C (spekulaatio), D (keskittyminen) ja E (ajoitus) lisätään myöhemmin.
