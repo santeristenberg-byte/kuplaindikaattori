@@ -8,7 +8,7 @@ Rehellisyyssäännöt (nämä ovat koko tuloskortin uskottavuuden perusta):
      SEURAAVAN kaupankäyntipäivän (maanantain) avauskurssi – se hinta, jonka lukija olisi oikeasti
      saanut. Näin viikonlopun uutiset, jotka tekoäly on voinut lukea, eivät vääristä tulosta.
   2. Saman viikon ennusteita ei koskaan kirjoiteta yli. Uusintaajo käyttää jo jäädytettyjä.
-  3. Pisteytys on mekaanista: osuma = kohde voitti vertailuindeksinsä (nousuehdokas) tai
+  3. Pisteytys on mekaanista: osuma = kohde voitti vertailuindeksinsä (nousuehdokas, sektorinäkymä) tai
      hävisi sille (kuplavaroitus). Tekoäly ei pisteytä itseään.
   4. Tekoälyn valintojen rinnalle jäädytetään joka viikko pelkän momentum-säännön valinnat.
      Näin nähdään, tuoko tekoäly lisäarvoa yksinkertaiseen sääntöön verrattuna.
@@ -195,19 +195,24 @@ def candidates(feat: pd.DataFrame, uni: pd.DataFrame) -> dict:
     near = st[(st["huipusta"] > -2) & (st["r4w"] > 5)].sort_values("r4w", ascending=False).head(8)
     hot = f.dropna(subset=["yli_200pv"]).sort_values("yli_200pv", ascending=False).head(10)
     etf = f[f["luokka"].isin(["sektori", "teema"])]
+    gics = f[f["luokka"] == "sektori"].dropna(subset=["r4w"])
     cry = f[f["luokka"] == "krypto"]
     return {
         "momentum": [_item(t, r, meta) for t, r in mom.iterrows()],
         "lahella_vuoden_huippua": [_item(t, r, meta) for t, r in near.iterrows()],
         "ylikuumentuneet": [_item(t, r, meta) for t, r in hot.iterrows()],
         "sektorit_ja_teemat": [_item(t, r, meta) for t, r in etf.sort_values("r4w", ascending=False).iterrows()],
+        # Kaikki 11 GICS-sektori-ETF:ää erikseen, järjestettynä kuukauden momentumilla – tästä joukosta
+        # valitaan "mikä sektori boomaa seuraavaksi" -näkymä (ei sekoiteta teema-ETF:iin kuten yllä).
+        "gics_sektorit": [_item(t, r, meta) for t, r in gics.sort_values("r4w", ascending=False).iterrows()],
         "krypto": [_item(t, r, meta) for t, r in cry.iterrows()],
     }
 
 
 def rule_picks(feat: pd.DataFrame, uni: pd.DataFrame) -> list[dict]:
     """Pelkkä momentum-sääntö (vertailukohta tekoälylle, ja varavalinnat jos tekoäly ei vastaa):
-    3 vahvinta 12 viikon momentum-osaketta eri sektoreilta + ylikuumentunein osake varoitukseksi."""
+    3 vahvinta 12 viikon momentum-osaketta eri sektoreilta, ylikuumentunein osake varoitukseksi
+    ja vahvimman 4 viikon momentumin GICS-sektori-ETF sektorinäkymäksi."""
     meta = uni.set_index("tunnus")
     st = feat.join(meta, how="inner")
     st = st[st["luokka"] == "osake"].dropna(subset=["r12w", "yli_200pv", "r1w"])
@@ -229,6 +234,14 @@ def rule_picks(feat: pd.DataFrame, uni: pd.DataFrame) -> list[dict]:
                       "perustelu": f"Kurssi on {fmt_pct(r['yli_200pv'], sign=False)} yli 200 päivän keskiarvon, "
                                    "mikä on universumin ylikuumentunein lukema.",
                       "laukaisija": "Voitonotot.", "riski": "Ylikuumentunut kurssi voi silti jatkaa nousuaan."})
+    sect = feat.join(meta, how="inner")
+    sect = sect[sect["luokka"] == "sektori"].dropna(subset=["r4w"]).sort_values("r4w", ascending=False)
+    if not sect.empty:
+        t, r = sect.index[0], sect.iloc[0]
+        picks.append({"tunnus": t, "tyyppi": "sektori",
+                      "perustelu": f"Vahvin 4 viikon momentum GICS-sektoreista ({fmt_pct(r['r4w'])}).",
+                      "laukaisija": "Sektorirotaation jatkuminen.",
+                      "riski": "Sektorirotaatio voi kääntyä nopeasti makrouutisten myötä."})
     return picks
 
 
@@ -295,7 +308,7 @@ def score_open(led: dict, prices: pd.DataFrame, opens: pd.DataFrame | None = Non
         r = (float(end[t]) / p0 - 1) * 100
         rb = (float(end[b]) / b0 - 1) * 100
         ex = r - rb
-        hit = ex > 0 if e["tyyppi"] == "nousu" else ex < 0
+        hit = ex > 0 if e["tyyppi"] in ("nousu", "sektori") else ex < 0
         e.update({"tila": "suljettu", "lahtohinta": round(p0, 4), "lahto_pvm": str(d0.date()),
                   "vertailun_lahto": round(b0, 4), "loppuhinta": round(float(end[t]), 4),
                   "tulos_pct": round(r, 2), "vertailu_pct": round(rb, 2), "ylituotto_pct": round(ex, 2),
@@ -346,12 +359,12 @@ def stats(led: dict, source: str | None = "ai") -> dict:
         return {"n": 0}
     hits = sum(e["osuma"] for e in rows)
     by = {}
-    for typ in ("nousu", "varoitus"):
+    for typ in ("nousu", "sektori", "varoitus"):
         r = [e for e in rows if e["tyyppi"] == typ]
         if r:
             by[typ] = {"n": len(r), "osumat": sum(e["osuma"] for e in r),
                        "keskim_ylituotto_pct": round(float(np.mean([e["ylituotto_pct"] for e in r])), 2)}
-    best = max(rows, key=lambda e: e["ylituotto_pct"] if e["tyyppi"] == "nousu" else -e["ylituotto_pct"])
+    best = max(rows, key=lambda e: e["ylituotto_pct"] if e["tyyppi"] != "varoitus" else -e["ylituotto_pct"])
     return {"n": len(rows), "osumat": hits, "osumaprosentti": round(100 * hits / len(rows), 1),
             "viikkoja": len({e["viikko_id"] for e in rows}), "tyypeittain": by,
             "paras": {k: best[k] for k in ("tunnus", "nimi", "tyyppi", "ylituotto_pct", "viikko_id")}}

@@ -23,7 +23,6 @@ import argparse
 import datetime as dt
 import html
 import json
-import math
 import os
 import re
 import smtplib
@@ -600,11 +599,11 @@ def ai_write(facts: dict) -> tuple[dict, dict]:
 
 
 # ----------------------------------------------------------------------------
-# Tutka: toinen AI-kutsu (itsearvio, oppi, nousuehdokkaat ja kuplavaroitus)
+# Tutka: toinen AI-kutsu (itsearvio, oppi, nousuehdokkaat, sektorinäkymä ja kuplavaroitus)
 # ----------------------------------------------------------------------------
-TUTKA_KEYS = ("itsearvio", "uusi_oppi", "ehdokkaat", "varoitus")
+TUTKA_KEYS = ("itsearvio", "uusi_oppi", "ehdokkaat", "varoitus", "sektorinakyma")
 
-TUTKA_SYSTEM = """Olet Kuplamittarin tutka-analyytikko. Tutka on uutiskirjeen osio, jossa julkaistaan joka viikko kolme nousuehdokasta ja yksi kuplavaroitus seuraavalle pörssiviikolle. Ennusteet jäädytetään ennen viikon alkua ja pisteytetään mekaanisesti: nousuehdokas osuu, jos se voittaa vertailunsa (osakkeilla ja ETF:illä S&P 500, kryptoilla bitcoin), ja kuplavaroitus osuu, jos se häviää vertailulleen. Lukijat näkevät jokaisen onnistumisen ja virheen.
+TUTKA_SYSTEM = """Olet Kuplamittarin tutka-analyytikko. Tutka on uutiskirjeen osio, jossa julkaistaan joka viikko kolme nousuehdokasta, yksi sektorinäkymä ja yksi kuplavaroitus seuraavalle pörssiviikolle. Ennusteet jäädytetään ennen viikon alkua ja pisteytetään mekaanisesti: nousuehdokas ja sektorinäkymä osuvat, jos ne voittavat vertailunsa (osakkeilla ja ETF:illä S&P 500, kryptoilla bitcoin), ja kuplavaroitus osuu, jos se häviää vertailulleen. Lukijat näkevät jokaisen onnistumisen ja virheen.
 
 TEHTÄVÄ
 1) Itsearvio. Jos faktapaketissa on viime viikon tulokset, arvioi ne rehellisesti 2–4 virkkeellä: mikä perustelu kesti, mikä ei ja kuinka paljon oli sattumaa. Yhden viikon tulos on suurelta osin kohinaa, joten älä ylitulkitse onnistumista tai epäonnistumista. Vertaa kertymää pelkkään momentum-sääntöön. Tiivistä yksi konkreettinen oppi (1 virke), jota käytät jatkossa. Jos tuloksia ei vielä ole, jätä itsearvio ja uusi_oppi tyhjiksi.
@@ -616,7 +615,8 @@ TEHTÄVÄ
    - Ota huomioon kuplamittarin tila: korkealla kuplalukemalla ylikuumentuneet momentum-kohteet ovat alttiita äkillisille laskuille.
    - Kuplavaroitus on ylikuumentunut kohde tai kohde, jonka arvostus on irronnut perusteista ja joka todennäköisemmin häviää vertailulleen ensi viikolla. Se ei ole lyhyeksimyyntikehotus.
    - Hyödynnä aiemmat opit.
-3) Kirjoita kullekin kohteelle perustelu (1–2 virkettä konkreettisin luvuin), laukaisija (mikä voi liikuttaa kurssia ensi viikolla, päivämäärän kanssa jos se on tiedossa) ja riski (1 virke).
+3) Valitse lisäksi yksi sektorinäkymä: se GICS-sektori (faktapaketin ehdokkaat.gics_sektorit-listalta, esim. XLK, XLE, XLV, XLF, XLI, XLY, XLP, XLC, XLB, XLU, XLRE), jonka uskot pärjäävän parhaiten suhteessa S&P 500 -indeksiin ensi viikolla. Tämä on kirjeen "mikä sektori boomaa seuraavaksi" -osio, joten kirjoita se kuten terävä markkinakommentaattori some-ketjussa pohtisi: nimeä konkreettinen narratiivi tai sektorirotaatioteema (esim. tekoälyn pääomamenot, korkosyklin käänne, energian hinnat, kulutuksen palautuminen, sääntelymuutos, vaalit, kausivaihtelu), ja perustele miksi juuri tämä sektori hyötyy siitä seuraavien viikkojen aikana muita enemmän. Tämäkin pisteytetään mekaanisesti, joten pysy silti faktoissa – rohkea näkemys, ei ylilupausta.
+4) Kirjoita kullekin kohteelle perustelu (1–2 virkettä konkreettisin luvuin, sektorinäkymälle saa käyttää 2–4 virkettä laajemman narratiivin avaamiseen), laukaisija (mikä voi liikuttaa kurssia ensi viikolla, päivämäärän kanssa jos se on tiedossa) ja riski (1 virke).
 
 SÄÄNNÖT
 - Älä lupaa tuottoja äläkä käytä sanoja "varma" tai "taattu". Yhden viikon ennuste on aina epävarma.
@@ -630,7 +630,8 @@ Tee ensin verkkohaut. Palauta lopuksi AINOASTAAN yksi JSON-objekti ilman muuta t
   "itsearvio": "…",
   "uusi_oppi": "…",
   "ehdokkaat": [{"tunnus": "…", "perustelu": "…", "laukaisija": "…", "riski": "…"}],
-  "varoitus": {"tunnus": "…", "perustelu": "…", "laukaisija": "…", "riski": "…"}
+  "varoitus": {"tunnus": "…", "perustelu": "…", "laukaisija": "…", "riski": "…"},
+  "sektorinakyma": {"tunnus": "…", "perustelu": "…", "laukaisija": "…", "riski": "…"}
 }"""
 
 
@@ -652,7 +653,8 @@ def _norm_ticker(t) -> str:
 
 
 def validate_picks(obj: dict, uni: pd.DataFrame) -> list[dict]:
-    """AI:n valinnat -> enintään 3 nousuehdokasta (max 1 ETF ja 1 krypto) + 1 varoitus, vain universumista."""
+    """AI:n valinnat -> enintään 3 nousuehdokasta (max 1 ETF ja 1 krypto) + 1 varoitus + 1 sektorinäkymä
+    (GICS-sektori-ETF), vain universumista."""
     meta = uni.set_index("tunnus")
     picks, seen, n_etf, n_cry = [], set(), 0, 0
     for c in (obj.get("ehdokkaat") or [])[:6]:
@@ -674,13 +676,23 @@ def validate_picks(obj: dict, uni: pd.DataFrame) -> list[dict]:
         if len(picks) == 3:
             break
     v = obj.get("varoitus")
+    v_tunnus = None
     if isinstance(v, dict):
         t = _norm_ticker(v.get("tunnus"))
         if t in meta.index and t not in seen:
             picks.append({"tunnus": t, "tyyppi": "varoitus", "perustelu": _clean(v.get("perustelu"), 400),
                           "laukaisija": _clean(v.get("laukaisija"), 250), "riski": _clean(v.get("riski"), 250)})
+            v_tunnus = t
         else:
             warn(f"kuplavaroitus {v.get('tunnus')!r} hylätty")
+    sk = obj.get("sektorinakyma")
+    if isinstance(sk, dict):
+        t = _norm_ticker(sk.get("tunnus"))
+        if t in meta.index and meta.loc[t, "luokka"] == "sektori" and t not in seen and t != v_tunnus:
+            picks.append({"tunnus": t, "tyyppi": "sektori", "perustelu": _clean(sk.get("perustelu"), 600),
+                          "laukaisija": _clean(sk.get("laukaisija"), 250), "riski": _clean(sk.get("riski"), 250)})
+        else:
+            warn(f"sektorinäkymä {sk.get('tunnus')!r} hylätty: tuntematon, ei GICS-sektori-ETF tai toistuu")
     return picks
 
 
@@ -743,7 +755,7 @@ def tutka_factpack(facts: dict, tk: dict, wk: dict, number: int, sc: dict | None
 def template_itsearvio(sc: dict) -> str:
     rows = sc["rivit"]
     hits = sum(e["osuma"] for e in rows)
-    best = max(rows, key=lambda e: e["ylituotto_pct"] if e["tyyppi"] == "nousu" else -e["ylituotto_pct"])
+    best = max(rows, key=lambda e: e["ylituotto_pct"] if e["tyyppi"] != "varoitus" else -e["ylituotto_pct"])
     return (f"Viime viikon tutka osui {hits}/{len(rows)}. Parhaiten onnistui {best['nimi']} "
             f"({fi_signed(best['ylituotto_pct'], 1)} %-yks. vertailuunsa). Yhden viikon tulos on pitkälti sattumaa, "
             "siksi menetelmää arvioidaan kertymän perusteella.")
@@ -1059,6 +1071,7 @@ STYLE = """<style>
     .hair     { border-color:#2c2c2a !important; }
     .up       { color:#0ca30c !important; }
     .down     { color:#e66767 !important; }
+    .sector   { color:#b79aef !important; }
     .trk-good { background:#164315 !important; }
     .trk-warn { background:#5d4819 !important; }
     .trk-ser  { background:#593a2d !important; }
@@ -1076,9 +1089,9 @@ STYLE = """<style>
     .hm-0 { background:#2c2c2a !important; }
     .gap { border-color:#1a1a19 !important; }
     .edge-up { border-left-color:#0ca30c !important; } .edge-warn { border-left-color:#e66767 !important; }
-    .fg-0 { stroke:#0d366b !important; } .fg-1 { stroke:#3987e5 !important; } .fg-2 { stroke:#585650 !important; }
-    .fg-3 { stroke:#8a4a49 !important; } .fg-4 { stroke:#e66767 !important; }
-    .fg-needle { stroke:#ffffff !important; } .fg-hub { fill:#ffffff !important; }
+    .edge-sector { border-left-color:#b79aef !important; }
+    .fg-0 { background:#0d366b !important; } .fg-1 { background:#3987e5 !important; } .fg-2 { background:#585650 !important; }
+    .fg-3 { background:#8a4a49 !important; } .fg-4 { background:#e66767 !important; }
   }
   @media (max-width: 480px) {
     .px { padding-left:20px !important; padding-right:20px !important; }
@@ -1146,47 +1159,35 @@ def _pct_cell(x: float, dec: int = 1) -> tuple[str, str, str]:
     return (txt, "up", "#006300") if x > 0 else ((txt, "down", "#d03b3b") if x < 0 else (txt, "ink-2", "#52514e"))
 
 
-def _fg_pt(cx: float, cy: float, r: float, value: float) -> tuple[float, float]:
-    """Pisteen (x, y) kaari-mittarin kehällä arvolle 0-100. 0 = vasen laita (pelko),
-    100 = oikea laita (ahneus), 50 = yläkeskellä."""
-    theta = math.radians(180 - 1.8 * max(0.0, min(100.0, value)))
-    return cx + r * math.cos(theta), cy - r * math.sin(theta)
-
-
 def render_feargreed(fg: dict | None) -> str:
-    """Analoginen pelko/ahneus-mittari: puoliympyrän muotoinen kaari viidellä vyöhykkeellä
-    (pelko vasemmalla, ahneus oikealla) ja osoitin viikon lukemassa. SVG on inline (ei erillistä
-    kuvatiedostoa), ja luku näytetään myös tekstinä osoittimen alla, jotta sisältö säilyy niissäkin
-    sähköpostiohjelmissa jotka eivät piirrä SVG:tä."""
+    """Pelko/ahneus-mittari värillisenä palkkina (5 vyöhykettä, pelko vasemmalla, ahneus oikealla)
+    ja osoittimena palkin päällä. Rakennettu pelkillä taulukkosoluilla ja väripohjilla ilman
+    SVG:tä tai kuvia, koska moni sähköpostiohjelma (mm. Gmailin sovellukset) ei piirrä inline-SVG:tä
+    luotettavasti – aiempi SVG-versio näkyi osalle lukijoista pelkkänä tekstinä "PELKOAHNEUS"."""
     if not fg:
         return ""
-    score, zi = fg["pisteet"], fg["vyohyke_i"]
-    cx, cy, r, sw = 100.0, 92.0, 78.0, 16.0
-    arcs = []
-    for i, (lo, hi, _) in enumerate(FG_ZONES):
-        x0, y0 = _fg_pt(cx, cy, r, lo)
-        x1, y1 = _fg_pt(cx, cy, r, hi)
-        arcs.append(f'<path class="fg-{i}" d="M{x0:.1f},{y0:.1f} A{r:.0f},{r:.0f} 0 0,1 {x1:.1f},{y1:.1f}" '
-                    f'fill="none" stroke="{FG_COLORS[i]}" stroke-width="{sw:.0f}" stroke-linecap="butt"/>')
-    nx, ny = _fg_pt(cx, cy, r - sw / 2 - 12, score)
-    needle = (f'<line class="fg-needle" x1="{cx:.0f}" y1="{cy:.0f}" x2="{nx:.1f}" y2="{ny:.1f}" '
-              'stroke="#0b0b0b" stroke-width="3" stroke-linecap="round"/>'
-              f'<circle class="fg-hub" cx="{cx:.0f}" cy="{cy:.0f}" r="6" fill="#0b0b0b"/>')
-    aria = html.escape(f"Pelko/ahneus-mittari: {disp(score)}/100, {fg['vyohyke']}", quote=True)
-    svg = (f'<svg width="200" height="118" viewBox="0 0 200 118" xmlns="http://www.w3.org/2000/svg" '
-           f'role="img" aria-label="{aria}">'
-           + "".join(arcs) + needle +
-           f'<text x="{cx - r - 4:.0f}" y="{cy + 18:.0f}" class="fg-lbl" font-size="11" font-weight="700" '
-           'fill="#898781" text-anchor="start" font-family="' + FONT.replace('"', "'") + '">PELKO</text>'
-           f'<text x="{cx + r + 4:.0f}" y="{cy + 18:.0f}" class="fg-lbl" font-size="11" font-weight="700" '
-           'fill="#898781" text-anchor="end" font-family="' + FONT.replace('"', "'") + '">AHNEUS</text>'
-           '</svg>')
+    score = max(0.0, min(100.0, fg["pisteet"]))
+    seg = "".join(
+        f'<td class="fg-{i}" width="{hi - lo}%" height="14" style="background:{FG_COLORS[i]};height:14px;'
+        f'font-size:0;line-height:0;{"border-radius:7px 0 0 7px;" if i == 0 else ""}'
+        f'{"border-radius:0 7px 7px 0;" if i == len(FG_ZONES) - 1 else ""}">&nbsp;</td>'
+        for i, (lo, hi, _) in enumerate(FG_ZONES))
+    pointer = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+               f'<td width="{score:.0f}%" style="font-size:0;line-height:0;">&nbsp;</td>'
+               f'<td class="ink-1" style="font-size:18px;line-height:1;color:#0b0b0b;font-weight:700;">&#9660;</td>'
+               f'<td style="font-size:0;line-height:0;">&nbsp;</td></tr></table>')
+    bar = (pointer
+           + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{seg}</tr></table>'
+           + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+           + '<td align="left" class="ink-3" style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:#898781;padding-top:4px;">PELKO</td>'
+           + '<td align="right" class="ink-3" style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:#898781;padding-top:4px;">AHNEUS</td>'
+           + '</tr></table>')
     parts_txt = ", ".join(o["nimi"] for o in fg["osat"])
     return _row(
         label("Pelko vai ahneus?")
         + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">'
-        f'<tr><td align="center" style="padding:0;line-height:0;">{svg}</td></tr>'
-        '<tr><td align="center" class="ink-1" style="padding-top:0;font-size:22px;font-weight:700;color:#0b0b0b;">'
+        f'<tr><td style="padding:6px 4px 0;">{bar}</td></tr>'
+        '<tr><td align="center" class="ink-1" style="padding-top:14px;font-size:22px;font-weight:700;color:#0b0b0b;">'
         f'{disp(score)}<span class="ink-2" style="font-size:15px;font-weight:600;color:#52514e;">/100</span>'
         f'&nbsp;&middot;&nbsp;{html.escape(fg["vyohyke"])}</td></tr>'
         '<tr><td align="center" class="ink-2" style="padding-top:8px;font-size:13px;line-height:1.5;color:#52514e;'
@@ -1268,7 +1269,8 @@ def render_scorecard(tv: dict) -> str:
     hits = sum(e["osuma"] for e in rows)
     trs = []
     for e in rows:
-        kind = "&#9650;&nbsp;Nousu" if e["tyyppi"] == "nousu" else "&#9888;&#65038;&nbsp;Varoitus"
+        kind = ("&#9650;&nbsp;Nousu" if e["tyyppi"] == "nousu" else
+                "&#8635;&nbsp;Sektori" if e["tyyppi"] == "sektori" else "&#9888;&#65038;&nbsp;Varoitus")
         ok = e["osuma"]
         verdict = (f'<span class="up" style="color:#006300;font-weight:700;">&#10003;&nbsp;Osui</span>' if ok else
                    f'<span class="down" style="color:#d03b3b;font-weight:700;">&#10007;&nbsp;Ohi</span>')
@@ -1301,20 +1303,27 @@ def render_tutka(tv: dict, wk: dict) -> str:
         return _row(label("Tutka") + '<p class="ink-2" style="margin:8px 0 0;font-size:15px;color:#52514e;">'
                     'Tutkan ennusteet julkaistaan lauantain numerossa.</p>', 28)
     feat = tv.get("feat")
-    intro = (f'Ensi viikon ({fi_range(wk["ensi_alku"], wk["ensi_loppu"])}) nousuehdokkaat ja kuplavaroitus. '
+    intro = (f'Ensi viikon ({fi_range(wk["ensi_alku"], wk["ensi_loppu"])}) nousuehdokkaat, sektorinäkymä ja kuplavaroitus. '
              'Tulos lasketaan maanantain avauskurssista perjantain päätöskurssiin, eli juuri niin kuin lukija olisi '
              'voinut toimia. Tulokset ensi numerossa.')
     if tv.get("published") == "saanto":
         intro += " " + (tv.get("note") or "Tällä viikolla ehdokkaat valitsi pelkkä momentum-sääntö.")
     cards = []
-    order = [p for p in picks if p["tyyppi"] == "nousu"] + [p for p in picks if p["tyyppi"] == "varoitus"]
+    order = ([p for p in picks if p["tyyppi"] == "nousu"] + [p for p in picks if p["tyyppi"] == "sektori"]
+             + [p for p in picks if p["tyyppi"] == "varoitus"])
     for p in order:
-        up = p["tyyppi"] == "nousu"
-        edge, col, cls = ("#0ca30c", "#006300", "edge-up") if up else ("#d03b3b", "#d03b3b", "edge-warn")
-        tag = "&#9650;&nbsp;Nousuehdokas" if up else "&#9888;&#65038;&nbsp;Kuplavaroitus"
+        typ = p["tyyppi"]
+        if typ == "nousu":
+            edge, col, cls, txtcls, tag = "#0ca30c", "#006300", "edge-up", "up", "&#9650;&nbsp;Nousuehdokas"
+        elif typ == "sektori":
+            edge, col, cls, txtcls, tag = "#6f42c1", "#6f42c1", "edge-sector", "sector", "&#8635;&nbsp;Sektorinäkymä"
+        else:
+            edge, col, cls, txtcls, tag = "#d03b3b", "#d03b3b", "edge-warn", "down", "&#9888;&#65038;&nbsp;Kuplavaroitus"
         data = []
         if feat is not None and p["tunnus"] in feat.index:
             f = feat.loc[p["tunnus"]]
+            if typ == "sektori" and pd.notna(f.get("r4w")):
+                data.append(f"4 vk {fi_signed(float(f['r4w']), 1)}{NBSP}%")
             if pd.notna(f.get("r12w")):
                 data.append(f"12 vk {fi_signed(float(f['r12w']), 1)}{NBSP}%")
             if pd.notna(f.get("yli_200pv")):
@@ -1324,13 +1333,16 @@ def render_tutka(tv: dict, wk: dict) -> str:
         lines = "".join(
             f'<div class="ink-1" style="font-size:14px;line-height:1.5;color:#0b0b0b;padding-top:4px;"><strong>{k}:</strong> {rich(v)}</div>'
             for k, v in (("Miksi", p.get("perustelu")), ("Laukaisija", p.get("laukaisija")), ("Riski", p.get("riski"))) if v)
+        # Sektori-ETF:llä nimi ON jo sektorin nimi (esim. "Energia"), joten alaotsikkoon riittää tunnus
+        # eikä toisteta samaa sanaa kahdesti.
+        sub = (html.escape(p["tunnus"]) if typ == "sektori" else
+               f'{html.escape(p["tunnus"])} &middot; {html.escape(str(p.get("sektori", "")))}')
         cards.append(f'<table role="presentation" class="hair {cls}" width="100%" cellpadding="0" cellspacing="0" border="0" '
                      f'style="border:1px solid #e1e0d9;border-left:4px solid {edge};border-radius:8px;margin-top:10px;">'
-                     f'<tr><td style="padding:12px 16px;"><div class="{"up" if up else "down"}" style="font-size:12px;font-weight:700;letter-spacing:0.06em;'
+                     f'<tr><td style="padding:12px 16px;"><div class="{txtcls}" style="font-size:12px;font-weight:700;letter-spacing:0.06em;'
                      f'text-transform:uppercase;color:{col};">{tag}</div>'
                      f'<div class="ink-1" style="font-size:16px;font-weight:700;color:#0b0b0b;padding-top:2px;">{html.escape(p["nimi"])} '
-                     f'<span class="ink-3" style="font-size:13px;font-weight:400;color:#898781;">{html.escape(p["tunnus"])} &middot; '
-                     f'{html.escape(str(p.get("sektori", "")))}</span></div>'
+                     f'<span class="ink-3" style="font-size:13px;font-weight:400;color:#898781;">{sub}</span></div>'
                      f'<div class="ink-3 num" style="font-size:12px;color:#898781;padding-top:2px;">{" &middot; ".join(data)}</div>'
                      f'{lines}</td></tr></table>')
     return _row(label("Tutka") + f'<p class="ink-2" style="margin:8px 0 0;font-size:14px;line-height:1.5;color:#52514e;">{intro}</p>'
@@ -1382,7 +1394,7 @@ def teaser(tv: dict | None) -> str:
         rows = tv["scorecard"]["rivit"]
         parts.append(f"tuloskortti ({sum(e['osuma'] for e in rows)}/{len(rows)} osui)")
     if tv and tv.get("picks"):
-        parts.append("tutkan uudet nousuehdokkaat ja kuplavaroitus")
+        parts.append("tutkan uudet nousuehdokkaat, sektorinäkymä ja kuplavaroitus")
     parts += ["viikon nousijat", "kuplalukema lopussa"]
     return ("Tässä numerossa: " + " &middot; ".join(parts) + ".") if parts else ""
 
@@ -1600,7 +1612,8 @@ def render_text(facts: dict, texts: dict, wk: dict, run_date: dt.date, tv: dict 
         if sc:
             L.append("TULOSKORTTI")
             for e in sc["rivit"]:
-                L.append(f"- {'Nousu' if e['tyyppi'] == 'nousu' else 'Varoitus'} {e['nimi']} ({e['tunnus']}): "
+                kind_txt = "Nousu" if e["tyyppi"] == "nousu" else "Sektori" if e["tyyppi"] == "sektori" else "Varoitus"
+                L.append(f"- {kind_txt} {e['nimi']} ({e['tunnus']}): "
                          f"{pct(e['tulos_pct'])}, vs. vertailu {fi_signed(e['ylituotto_pct'], 1)} %-yks. "
                          f"{'OSUI' if e['osuma'] else 'OHI'}")
             L.append(f"Kertymä: tekoäly {_stat_line(sc.get('kertyma_ai'))}, momentum-sääntö {_stat_line(sc.get('kertyma_saanto'))}"
@@ -1612,8 +1625,13 @@ def render_text(facts: dict, texts: dict, wk: dict, run_date: dt.date, tv: dict 
             L.append("")
         if tv.get("picks"):
             L.append(f"TUTKA – ensi viikko {fi_range(wk['ensi_alku'], wk['ensi_loppu'])}")
-            for p in [x for x in tv["picks"] if x["tyyppi"] == "nousu"] + [x for x in tv["picks"] if x["tyyppi"] == "varoitus"]:
-                L.append(f"- {'NOUSUEHDOKAS' if p['tyyppi'] == 'nousu' else 'KUPLAVAROITUS'}: {p['nimi']} ({p['tunnus']})")
+            pick_order = ([x for x in tv["picks"] if x["tyyppi"] == "nousu"]
+                          + [x for x in tv["picks"] if x["tyyppi"] == "sektori"]
+                          + [x for x in tv["picks"] if x["tyyppi"] == "varoitus"])
+            for p in pick_order:
+                tag_txt = ("NOUSUEHDOKAS" if p["tyyppi"] == "nousu" else
+                           "SEKTORINÄKYMÄ" if p["tyyppi"] == "sektori" else "KUPLAVAROITUS")
+                L.append(f"- {tag_txt}: {p['nimi']} ({p['tunnus']})")
                 for k, v in (("Miksi", p.get("perustelu")), ("Laukaisija", p.get("laukaisija")), ("Riski", p.get("riski"))):
                     if v:
                         L.append(f"  {k}: {strip(v)}")
