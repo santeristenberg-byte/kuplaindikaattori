@@ -1,10 +1,10 @@
 KUPLAINDIKAATTORI — viikko 38/2026   (data 2026-09-30)
 ================================================================
-KUPLARISKI        81.3 / 100   Kupla-alue  (-0.0 vs. edellinen ajo 2026-09-19)
-                 datan kattavuus 91 %
+KUPLARISKI        83.4 / 100   Kupla-alue  (+2.1 vs. edellinen ajo 2026-09-19)
+                 datan kattavuus 100 %
   Arvostus                 99.5   (paino 60 %, kattavuus 100 %)
-  Vipu & likviditeetti     54.0   (paino 40 %, kattavuus 86 %)
-  Ääriarvoja               5 / 10 muuttujasta yli 90. persentiilin (50 %)
+  Vipu & likviditeetti     59.2   (paino 40 %, kattavuus 100 %)
+  Ääriarvoja               6 / 11 muuttujasta yli 90. persentiilin (55 %)
 
 MUUTTUJAT (persentiili omaa historiaa vasten, 100 = kuplamaisin)
   A1 Shiller CAPE (S&P 500)                            100  ##########
@@ -15,21 +15,18 @@ MUUTTUJAT (persentiili omaa historiaa vasten, 100 = kuplamaisin)
   B2 Margin debtin 12 kk kasvu                          89  ########
   B3 Reaalinen M2-kasvu (12 kk)                         41  ####
   B4 Keskuspankkilikviditeetti, 12 kk muutos (Fed+EKP+BoJ)   15  #
-  B5 High yield -luottomarginaali                      n/a    (historia 37 kk < 120 kk)
+  B5 Luottomarginaali (Moody's Baa − 10v)               98  #########
   B6 Reaalinen ohjauskorko                              66  ######
-  B7 Yksityisen velan/BKT 3 v muutos                    14  #
+  B7 Yksityisen velan/BKT 3 v muutos                     7  
 
 ANALOGIA (mitä historiallista huippua nykytila muistuttaa)
-  2000-03 Dotcom               46 %   (7 yhteistä muuttujaa)
-  2021-11 Pandemiakupla        41 %   (10 yhteistä muuttujaa)
+  2021-11 Pandemiakupla        35 %   (11 yhteistä muuttujaa)
+  2000-03 Dotcom               16 %   (8 yhteistä muuttujaa)
   1972-12 Nifty Fifty           0 %   (6 yhteistä muuttujaa)
-  2007-10 Luottokupla           0 %   (8 yhteistä muuttujaa)
-  Samankaltaisinta (2000-03 Dotcom): Osakeriskipreemio (1/CAPE − reaalikorko); Shiller CAPE (S&P 500); Reaalinen M2-kasvu (12 kk)
-  Erilaisinta:      Yksityisen velan/BKT 3 v muutos; Reaalinen ohjauskorko; Tobinin Q
+  2007-10 Luottokupla           0 %   (9 yhteistä muuttujaa)
+  Samankaltaisinta (2021-11 Pandemiakupla): Buffett-indikaattori (Wilshire 5000 / BKT); Margin debtin 12 kk kasvu; Luottomarginaali (Moody's Baa − 10v)
+  Erilaisinta:      Yksityisen velan/BKT 3 v muutos; Reaalinen ohjauskorko; Osakeriskipreemio (1/CAPE − reaalikorko)
 
 52 viikon vaihteluväli: 73–81
 
 Vaihe 1: mukana pilarit A ja B. Pilarit C (spekulaatio), D (keskittyminen) ja E (ajoitus) lisätään myöhemmin.
-
-VAROITUKSET:
-  - FRED BAMLH0A0HYM2: vain 37 kk historiaa (reitti: api)
