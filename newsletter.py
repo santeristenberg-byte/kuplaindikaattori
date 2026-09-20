@@ -16,12 +16,14 @@ Ajo:
   python newsletter.py --no-ai          pakota ilmainen pohja
   python newsletter.py --mock-ai F      käytä tiedoston F JSON-vastausta AI:n sijaan (testaus)
   python newsletter.py --mock-markets F käytä tiedoston F markkinadataa (testaus ilman verkkoa)
+  python newsletter.py --mock-feargreed F käytä tiedoston F pelko/ahneus-lukemaa (testaus ilman verkkoa)
   python newsletter.py --date 2026-09-19   aja kuin olisi annettu päivä
 """
 import argparse
 import datetime as dt
 import html
 import json
+import math
 import os
 import re
 import smtplib
@@ -63,6 +65,7 @@ PRICES = {  # USD / miljoona tokenia (syöte, tuotos) — kustannusseurantaa var
 SEARCH_PRICE = 0.01
 FRED_API_KEY = os.environ.get("FRED_API_KEY", "").strip()
 ALERT_THRESHOLD = float(os.environ.get("ALERT_THRESHOLD", "75"))
+SITE_URL = os.environ.get("SITE_URL", "").strip().rstrip("/")   # esim. https://kayttaja.github.io/repo (GitHub Pages)
 
 NBSP = " "
 MINUS = "−"
@@ -77,6 +80,14 @@ LEVEL = {
     "none":     {"fill": "#c3c2b7", "track": "#e1e0d9", "cls": "none"},
 }
 ZONES = [(0, 40, "Rauhallinen"), (40, 60, "Kallis"), (60, 75, "Esiaste"), (75, 90, "Kupla"), (90, 100, "Ääri")]
+
+# Pelko/ahneus-mittari: eri asia kuin kuplalukema (lyhyen aikavälin tunnelma, ei pitkän aikavälin
+# yliarvostus), joten oma, neutraali kaksisuuntainen väripaletti (sininen<->punainen), ei
+# hyvä/paha-väritystä kuten kuplamittarin tila-väreissä.
+FG_ZONES = [(0, 25, "Äärimmäinen pelko"), (25, 45, "Pelko"), (45, 55, "Neutraali"),
+            (55, 75, "Ahneus"), (75, 100, "Äärimmäinen ahneus")]
+FG_COLORS = ["#184f95", "#6da7ec", "#c3c2b7", "#f0b3b2", "#e34948"]
+FG_COLORS_DARK = ["#0d366b", "#3987e5", "#585650", "#8a4a49", "#e66767"]
 
 WARNINGS: list[str] = []
 
@@ -221,6 +232,91 @@ def fetch_markets(wk: dict) -> list[dict]:
     return rows
 
 
+# ----------------------------------------------------------------------------
+# Pelko/ahneus-mittari
+# ----------------------------------------------------------------------------
+def _pctrank(s: pd.Series, value: float | None) -> float | None:
+    """Nykyarvon persentiili sarjan omassa historiassa, 0-100. Sama periaate kuin
+    kupla.py:n pisteytyksessä: verrataan vain sarjan omaan menneisyyteen, ei mielivaltaiseen
+    rajaan, jotta hyvin erilaiset mittayksiköt (pisteet, prosentit, korkopisteet) tulevat
+    vertailukelpoisiksi."""
+    s = s.dropna()
+    if value is None or not np.isfinite(value) or len(s) < 40:
+        return None
+    return float((s < value).sum()) / len(s) * 100.0
+
+
+def _fg_zone(score: float) -> int:
+    for i, (lo, hi, _) in enumerate(FG_ZONES):
+        if score < hi or hi == 100:
+            return i
+    return len(FG_ZONES) - 1
+
+
+def fear_greed(wk: dict) -> dict | None:
+    """Pelko/ahneus-mittari 0-100 (0 = äärimmäinen pelko, 100 = äärimmäinen ahneus). Eri asia
+    kuin kuplalukema: tämä mittaa viikon markkinatunnelmaa lyhyellä aikavälillä, kuplalukema
+    pitkän aikavälin yliarvostusta.
+
+    Neljä osaa, kukin oman noin 1 vuoden historiansa persentiilinä (kuten kupla.py:n
+    pisteytys, mutta päivätasolla): VIX käänteisesti (matala VIX = ahneus), S&P 500:n poikkeama
+    125 pv liukuvasta keskiarvosta (momentum), S&P 500:n ja kullan suhteellinen 20 pv tuotto
+    (turvasatamakysyntä: kulta voittaa = pelko) sekä luottomarginaali BAA10Y käänteisesti (leveä
+    marginaali = pelko). Puuttuvat osat jätetään pois: jos alle kaksi osaa saadaan laskettua,
+    lukemaa ei julkaista sen sijaan että näytettäisiin harhaanjohtavan ohut luku."""
+    end = pd.Timestamp(wk["loppu"])
+    osat: list[dict] = []
+
+    def add(nimi: str, arvo: float | None) -> None:
+        if arvo is not None:
+            osat.append({"nimi": nimi, "pisteet": round(arvo, 1)})
+
+    try:
+        vix = yahoo_daily("^VIX")
+        vix = vix[vix.index <= end]
+        v = None if vix.empty else _pctrank(vix, float(vix.iloc[-1]))
+        add("VIX-pelkoindeksi", None if v is None else 100 - v)
+    except Exception as e:  # noqa: BLE001
+        warn(f"pelko/ahneus: VIX epäonnistui: {str(e)[:120]}")
+
+    spx = pd.Series(dtype=float)
+    try:
+        spx = yahoo_daily("^GSPC")
+        spx = spx[spx.index <= end]
+        if len(spx) > 130:
+            dev = (spx / spx.rolling(125).mean() - 1) * 100
+            dev = dev.dropna()
+            if not dev.empty:
+                add("S&P 500:n momentum (125 pv ka.)", _pctrank(dev, float(dev.iloc[-1])))
+    except Exception as e:  # noqa: BLE001
+        warn(f"pelko/ahneus: momentum epäonnistui: {str(e)[:120]}")
+
+    try:
+        gold = yahoo_daily("GC=F")
+        gold = gold[gold.index <= end]
+        if len(spx) > 25 and len(gold) > 25:
+            spread = ((spx.pct_change(20) - gold.pct_change(20).reindex(spx.index)) * 100).dropna()
+            if not spread.empty:
+                add("Osakkeet vs. kulta (turvasatamakysyntä)", _pctrank(spread, float(spread.iloc[-1])))
+    except Exception as e:  # noqa: BLE001
+        warn(f"pelko/ahneus: turvasatamakysyntä epäonnistui: {str(e)[:120]}")
+
+    try:
+        baa = fred_daily("BAA10Y")
+        baa = baa[baa.index <= end]
+        b = None if baa.empty else _pctrank(baa, float(baa.iloc[-1]))
+        add("Luottomarginaali (Baa − 10 v)", None if b is None else 100 - b)
+    except Exception as e:  # noqa: BLE001
+        warn(f"pelko/ahneus: luottomarginaali epäonnistui: {str(e)[:120]}")
+
+    if len(osat) < 2:
+        warn(f"pelko/ahneus: vain {len(osat)} osaa laskettavissa, jätetään koko mittari pois tällä viikolla")
+        return None
+    pisteet = round(sum(o["pisteet"] for o in osat) / len(osat), 1)
+    zi = _fg_zone(pisteet)
+    return {"pisteet": pisteet, "vyohyke": FG_ZONES[zi][2], "vyohyke_i": zi, "osat": osat}
+
+
 def fmt_level(r: dict) -> str:
     k, v = r["tyyppi"], r["taso"]
     if k == "yield":
@@ -334,7 +430,7 @@ SYSTEM_PROMPT = """Olet Kuplamittarin päätoimittaja. Kuplamittari on suomenkie
 
 TYYLI
 - Sujuvaa, elävää yleiskieltä kuin parhaalla talousjournalistilla. Lyhyitä virkkeitä. Selitä termi arkikielellä, kun käytät sitä ensimmäisen kerran (esim. CAPE = hinta suhteessa kymmenen vuoden keskimääräiseen tulokseen).
-- Tiivis: kaikki tekstikentät yhteensä noin 650–900 sanaa. Jokainen virke ansaitsee paikkansa.
+- Tiivis: sähköpostiin menevät tekstikentät (kaikki paitsi syvasukellus) yhteensä noin 650–900 sanaa. Jokainen virke ansaitsee paikkansa.
 - Etsi viikon tarina ja kytke uutiset kuplariskiin. Historialliset rinnastukset tekevät kirjeestä kiinnostavan, mutta vain tosiasioihin perustuvina.
 - Suomalaiset merkintätavat: desimaalipilkku (5,0 %), välilyönti ennen %-merkkiä, tuhaterotin välilyönnillä (80 000), päivämäärät muodossa 23.9., ajatusviiva välimerkkinä.
 - Saat käyttää **lihavointia** säästeliäästi. Ei muita muotoiluja, ei linkkejä tekstissä, ei emojeja.
@@ -368,6 +464,7 @@ Tee ensin verkkohaut. Palauta lopuksi AINOASTAAN yksi JSON-objekti ilman muuta t
   "viikon_luku": {"luku": "…", "otsikko": "…", "teksti": "…"},
   "liikkujat": [{"tunnus": "…", "syy": "…"}],
   "minuutti": {"aihe": "…", "teksti": "…"},
+  "syvasukellus": {"otsikko": "…", "teksti": "…"},
   "lahteet": [{"otsikko": "…", "url": "https://…"}]
 }
 Kenttien sisältö:
@@ -382,6 +479,7 @@ Kenttien sisältö:
 - liikkujat: faktapaketin kentän liikkujat kolmelle suurimmalle nousijalle ja kolmelle suurimmalle laskijalle yksi virke kurssiliikkeen syystä. Käytä tunnusta täsmälleen faktapaketin muodossa. Jos syy ei löydy luotettavasta lähteestä, jätä syy tyhjäksi – älä arvaa.
 - minuutti: yksi sijoittamisen käsite selitettynä arkikielellä (60–90 sanaa), mieluiten kytköksissä viikon aiheisiin. Älä toista faktapaketin listassa aiemmat_minuutit olevia aiheita.
 - loppusanat: 1–2 virkettä, jotka tiivistävät mistä lukema syntyy (ilman lukemaa numerona).
+- syvasukellus: kirjeen VERKKOVERSION oma laajempi osio, jota ei mahdu sähköpostiin. Sähköpostissa näkyy vain otsikko ja houkutin, koko teksti näkyy vain verkkosivulla – siksi tämä saa olla paljon pidempi kuin muut kentät, noin 300–500 sanaa. Pura tässä laajemmin auki jokin viikon aihe, kuplamittarin teema tai historiallinen vertailu, johon muissa kentissä ei ollut tilaa. Ei kuulu 650–900 sanan kokonaisrajaan.
 - lahteet: 3–8 tärkeintä käyttämääsi lähdettä."""
 
 
@@ -450,7 +548,8 @@ def call_claude(system: str, user: str, model: str, max_searches: int = 0) -> tu
     return "".join(texts), usage, cited
 
 
-EXPECTED_KEYS = ("otsikko", "ingressi", "esikatselu", "viikko", "teemat", "historia", "ensi_viikko", "loppusanat", "lahteet")
+EXPECTED_KEYS = ("otsikko", "ingressi", "esikatselu", "viikko", "teemat", "historia", "ensi_viikko", "loppusanat",
+                 "lahteet", "syvasukellus")
 
 
 def extract_json(text: str, keys: tuple = EXPECTED_KEYS) -> dict:
@@ -754,6 +853,33 @@ def template_luku(facts: dict) -> dict:
     return {}
 
 
+def template_syvasukellus(facts: dict) -> dict:
+    """Ilman tekoälyä koottu, hieman pidempi verkko-osio: pureudutaan kuplamaisimpaan teemaan
+    ja lähimpään historialliseen analogiaan tarkemmin kuin lyhyt kirje ehtii."""
+    th = facts["teemat"]
+    top = max((t for t in th.values() if t.get("pisteet") is not None), key=lambda t: t["pisteet"], default=None)
+    an = (facts.get("analogiat") or [None])[0]
+    if not top and not an:
+        return {}
+    parts = []
+    if top:
+        parts.append(f"Kuplamittarin kolmesta teemasta kuplamaisin on tällä hetkellä {top['nimi'].lower()}, "
+                      f"jonka tila on {top['tila'].lower()} ({disp(top['pisteet'])}/100). Se tarkoittaa, että nykytaso on "
+                      "kuplamaisempi kuin valtaosassa mitattua historiaa – mittari vertaa aina lukemaa sen omaan "
+                      "menneisyyteen, ei mielivaltaiseen rajaan.")
+    if an:
+        parts.append(f"Lähin historiallinen vertailukohta on huippu {an['huippu']} ({an['samankaltaisuus_pct']} % "
+                      f"samankaltaisuus nykytilanteeseen). Samankaltaisinta: {', '.join(an['samankaltaisinta'][:2]).lower()}. "
+                      f"Erilaisinta: {', '.join(an['erilaisinta'][:2]).lower()}. Historia ei toista itseään "
+                      "täsmälleen, mutta samat rakenteelliset piirteet – liiallinen optimismi, halpa velka tai "
+                      "molemmat – ovat toistuneet joka kerta ennen suurta korjausliikettä.")
+    parts.append("Muista: korkea lukema kertoo riskin tasosta, ei ajankohdasta. Kuplat voivat paisua vuosia ennen "
+                  "puhkeamistaan, ja mittari on tarkoitettu pitkän aikavälin näkymän hahmottamiseen, ei viikon "
+                  "kaupankäyntipäätöksiin.")
+    return {"otsikko": f"Syväsukellus: {top['nimi'].lower()}" if top else "Syväsukellus: historian kaiut",
+            "teksti": " ".join(parts)}
+
+
 # ----------------------------------------------------------------------------
 # Ilmainen pohja (varakirjoittaja): sama rakenne datasta
 # ----------------------------------------------------------------------------
@@ -907,6 +1033,14 @@ def sanitize(ai: dict | None, tmpl: dict, score: float) -> tuple[dict, list[str]
         if ai:
             replaced.append("minuutti")
         out["minuutti"] = tmpl.get("minuutti") or {}
+    sd = ai.get("syvasukellus")
+    if isinstance(sd, dict) and is_str(sd.get("otsikko")) and is_str(sd.get("teksti")) \
+            and not reveals.search(f"{sd['otsikko']} {sd['teksti']}"):
+        out["syvasukellus"] = {"otsikko": _clean(sd["otsikko"], 90), "teksti": _clean(sd["teksti"], 3500)}
+    else:
+        if ai:
+            replaced.append("syvasukellus")
+        out["syvasukellus"] = tmpl.get("syvasukellus") or {}
     return out, replaced
 
 
@@ -942,6 +1076,9 @@ STYLE = """<style>
     .hm-0 { background:#2c2c2a !important; }
     .gap { border-color:#1a1a19 !important; }
     .edge-up { border-left-color:#0ca30c !important; } .edge-warn { border-left-color:#e66767 !important; }
+    .fg-0 { stroke:#0d366b !important; } .fg-1 { stroke:#3987e5 !important; } .fg-2 { stroke:#585650 !important; }
+    .fg-3 { stroke:#8a4a49 !important; } .fg-4 { stroke:#e66767 !important; }
+    .fg-needle { stroke:#ffffff !important; } .fg-hub { fill:#ffffff !important; }
   }
   @media (max-width: 480px) {
     .px { padding-left:20px !important; padding-right:20px !important; }
@@ -958,6 +1095,11 @@ def rich(s: str) -> str:
     t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
     t = re.sub(r"(\d) (%|\$|bp\b)", rf"\1{NBSP}\2", t)
     return t
+
+
+def strip_md(s: str) -> str:
+    """Poistaa **lihavointi**-merkinnät raakatekstiin (historia, arkisto)."""
+    return re.sub(r"\*\*(.+?)\*\*", r"\1", s or "")
 
 
 def label(text: str) -> str:
@@ -1002,6 +1144,57 @@ def _pct_cell(x: float, dec: int = 1) -> tuple[str, str, str]:
     arrow = "&#9650;" if x > 0 else ("&#9660;" if x < 0 else "")
     txt = f"{arrow}{NBSP}{fi_signed(x, dec)}{NBSP}%".strip()
     return (txt, "up", "#006300") if x > 0 else ((txt, "down", "#d03b3b") if x < 0 else (txt, "ink-2", "#52514e"))
+
+
+def _fg_pt(cx: float, cy: float, r: float, value: float) -> tuple[float, float]:
+    """Pisteen (x, y) kaari-mittarin kehällä arvolle 0-100. 0 = vasen laita (pelko),
+    100 = oikea laita (ahneus), 50 = yläkeskellä."""
+    theta = math.radians(180 - 1.8 * max(0.0, min(100.0, value)))
+    return cx + r * math.cos(theta), cy - r * math.sin(theta)
+
+
+def render_feargreed(fg: dict | None) -> str:
+    """Analoginen pelko/ahneus-mittari: puoliympyrän muotoinen kaari viidellä vyöhykkeellä
+    (pelko vasemmalla, ahneus oikealla) ja osoitin viikon lukemassa. SVG on inline (ei erillistä
+    kuvatiedostoa), ja luku näytetään myös tekstinä osoittimen alla, jotta sisältö säilyy niissäkin
+    sähköpostiohjelmissa jotka eivät piirrä SVG:tä."""
+    if not fg:
+        return ""
+    score, zi = fg["pisteet"], fg["vyohyke_i"]
+    cx, cy, r, sw = 100.0, 92.0, 78.0, 16.0
+    arcs = []
+    for i, (lo, hi, _) in enumerate(FG_ZONES):
+        x0, y0 = _fg_pt(cx, cy, r, lo)
+        x1, y1 = _fg_pt(cx, cy, r, hi)
+        arcs.append(f'<path class="fg-{i}" d="M{x0:.1f},{y0:.1f} A{r:.0f},{r:.0f} 0 0,1 {x1:.1f},{y1:.1f}" '
+                    f'fill="none" stroke="{FG_COLORS[i]}" stroke-width="{sw:.0f}" stroke-linecap="butt"/>')
+    nx, ny = _fg_pt(cx, cy, r - sw / 2 - 12, score)
+    needle = (f'<line class="fg-needle" x1="{cx:.0f}" y1="{cy:.0f}" x2="{nx:.1f}" y2="{ny:.1f}" '
+              'stroke="#0b0b0b" stroke-width="3" stroke-linecap="round"/>'
+              f'<circle class="fg-hub" cx="{cx:.0f}" cy="{cy:.0f}" r="6" fill="#0b0b0b"/>')
+    aria = html.escape(f"Pelko/ahneus-mittari: {disp(score)}/100, {fg['vyohyke']}", quote=True)
+    svg = (f'<svg width="200" height="118" viewBox="0 0 200 118" xmlns="http://www.w3.org/2000/svg" '
+           f'role="img" aria-label="{aria}">'
+           + "".join(arcs) + needle +
+           f'<text x="{cx - r - 4:.0f}" y="{cy + 18:.0f}" class="fg-lbl" font-size="11" font-weight="700" '
+           'fill="#898781" text-anchor="start" font-family="' + FONT.replace('"', "'") + '">PELKO</text>'
+           f'<text x="{cx + r + 4:.0f}" y="{cy + 18:.0f}" class="fg-lbl" font-size="11" font-weight="700" '
+           'fill="#898781" text-anchor="end" font-family="' + FONT.replace('"', "'") + '">AHNEUS</text>'
+           '</svg>')
+    parts_txt = ", ".join(o["nimi"] for o in fg["osat"])
+    return _row(
+        label("Pelko vai ahneus?")
+        + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">'
+        f'<tr><td align="center" style="padding:0;line-height:0;">{svg}</td></tr>'
+        '<tr><td align="center" class="ink-1" style="padding-top:0;font-size:22px;font-weight:700;color:#0b0b0b;">'
+        f'{disp(score)}<span class="ink-2" style="font-size:15px;font-weight:600;color:#52514e;">/100</span>'
+        f'&nbsp;&middot;&nbsp;{html.escape(fg["vyohyke"])}</td></tr>'
+        '<tr><td align="center" class="ink-2" style="padding-top:8px;font-size:13px;line-height:1.5;color:#52514e;'
+        'max-width:420px;">Viikon markkinatunnelma lyhyellä aikavälillä – eri asia kuin kuplalukema, joka mittaa '
+        'yliarvostusta pitkällä aikavälillä.</td></tr>'
+        f'<tr><td align="center" class="ink-3" style="padding-top:6px;font-size:11px;color:#898781;">'
+        f'Perustuu: {html.escape(parts_txt)}.</td></tr>'
+        "</table>", 30)
 
 
 def render_luku(vl: dict) -> str:
@@ -1155,6 +1348,34 @@ def render_minuutti(mi: dict) -> str:
                 + '</td></tr></table>', 30)
 
 
+def render_syvasukellus(sd: dict | None, run_date: dt.date, web: bool) -> str:
+    """Laajempi verkko-osio. Sähköpostissa (web=False) näytetään vain otsikko ja houkutin, jossa
+    linkki verkkoversioon – ellei SITE_URL ole asetettu, jolloin osio jätetään kokonaan pois
+    sähköpostista (turha lupaus linkistä joka ei toimi). Verkkoversiolla (web=True) koko teksti
+    näkyy sellaisenaan."""
+    if not sd or not sd.get("teksti"):
+        return ""
+    if web:
+        return _row('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+                    'style="border:1px solid #e1e0d9;border-radius:10px;"><tr><td style="padding:18px 20px;">'
+                    + label("Syväsukellus")
+                    + f'<div class="ink-1" style="font-size:18px;font-weight:700;color:#0b0b0b;padding-top:6px;">{rich(sd.get("otsikko", ""))}</div>'
+                    + f'<div class="ink-1" style="font-size:15px;line-height:1.65;color:#0b0b0b;padding-top:8px;">{rich(sd["teksti"])}</div>'
+                    + '</td></tr></table>', 30)
+    if not SITE_URL:
+        return ""
+    url = f'{SITE_URL}/newsletter/arkisto/{run_date.isoformat()}.html'
+    return _row('<table role="presentation" class="bg-soft" width="100%" cellpadding="0" cellspacing="0" border="0" '
+                'style="background:#f4f3ee;border-radius:10px;"><tr><td style="padding:16px 18px;">'
+                + label("Syväsukellus (verkossa)")
+                + f'<div class="ink-1" style="font-size:16px;font-weight:700;color:#0b0b0b;padding-top:6px;">{rich(sd.get("otsikko", ""))}</div>'
+                + '<div class="ink-2" style="font-size:14px;line-height:1.5;color:#52514e;padding-top:6px;">'
+                'Tämä ei mahtunut kirjeeseen – koko juttu on luettavissa verkkoversiossa.</div>'
+                f'<div style="padding-top:10px;"><a href="{html.escape(url, quote=True)}" '
+                'style="color:#256abf;font-size:14px;font-weight:700;text-decoration:none;">Lue kokonaan&nbsp;&#8599;</a></div>'
+                + '</td></tr></table>', 30)
+
+
 def teaser(tv: dict | None) -> str:
     parts = []
     if tv and tv.get("scorecard"):
@@ -1167,7 +1388,7 @@ def teaser(tv: dict | None) -> str:
 
 
 def render_html(facts: dict, texts: dict, wk: dict, run_date: dt.date, ai_used: bool,
-                tv: dict | None = None) -> str:
+                tv: dict | None = None, web: bool = False) -> str:
     score = facts["kuplalukema"]
     level = facts["taso"]
     lv = LEVEL.get(level, LEVEL["none"])
@@ -1193,6 +1414,15 @@ def render_html(facts: dict, texts: dict, wk: dict, run_date: dt.date, ai_used: 
       f'{WEEKDAYS[run_date.weekday()]} {fi_date(run_date)}</td></tr></table>'
       f'<div class="ink-3" style="font-size:13px;color:#898781;padding-top:4px;">Viikkokatsaus pörssin kuplariskiin '
       f'&middot; Numero {facts["numero"]}</div></td></tr>')
+    if SITE_URL:
+        if web:
+            nav = f'<a href="{html.escape(SITE_URL, quote=True)}/newsletter/arkisto/index.html" style="color:#256abf;text-decoration:none;">&larr;&nbsp;Kaikki numerot</a>'
+        else:
+            issue_url = f'{SITE_URL}/newsletter/arkisto/{run_date.isoformat()}.html'
+            nav = (f'<a href="{html.escape(issue_url, quote=True)}" style="color:#256abf;text-decoration:none;">Avaa selaimessa&nbsp;&#8599;</a>'
+                   f'&nbsp;&middot;&nbsp;<a href="{html.escape(SITE_URL, quote=True)}/newsletter/arkisto/index.html" '
+                   'style="color:#256abf;text-decoration:none;">Kaikki numerot&nbsp;&#8599;</a>')
+        a(f'<tr><td class="px ink-3" style="padding:8px 32px 0;font-size:12px;color:#898781;">{nav}</td></tr>')
     a('<tr><td class="px" style="padding:22px 32px 0;">'
       f'<h1 class="ink-1" style="margin:0;font-size:28px;line-height:1.2;font-weight:700;color:#0b0b0b;">{rich(texts["otsikko"])}</h1>'
       f'<p class="ink-2" style="margin:12px 0 0;font-size:17px;line-height:1.55;color:#52514e;">{rich(texts["ingressi"])}</p>'
@@ -1283,6 +1513,8 @@ def render_html(facts: dict, texts: dict, wk: dict, run_date: dt.date, ai_used: 
         a('</table></td></tr>')
 
     a(render_minuutti(texts.get("minuutti") or {}))
+    a(render_syvasukellus(texts.get("syvasukellus"), run_date, web))
+    a(render_feargreed(facts.get("_feargreed")))
 
     # Viikon kuplalukema (lopussa, kuten toivottu)
     zi = zone_of(score)
@@ -1404,11 +1636,68 @@ def render_text(facts: dict, texts: dict, wk: dict, run_date: dt.date, tv: dict 
     mi = texts.get("minuutti") or {}
     if mi.get("teksti"):
         L += [f"SIJOITTAJAN MINUUTTI: {strip(mi.get('aihe', ''))}", strip(mi["teksti"]), ""]
+    sd = texts.get("syvasukellus") or {}
+    if sd.get("teksti") and SITE_URL:
+        L += [f"SYVÄSUKELLUS (verkossa): {strip(sd.get('otsikko', ''))}",
+              f"Koko juttu: {SITE_URL}/newsletter/arkisto/{run_date.isoformat()}.html", ""]
+    fg = facts.get("_feargreed")
+    if fg:
+        L += [f"PELKO VAI AHNEUS: {disp(fg['pisteet'])}/100 – {fg['vyohyke']}",
+              "(Lyhyen aikavälin markkinatunnelma, eri asia kuin kuplalukema.)", ""]
     L += [f"VIIKON KUPLALUKEMA: {disp(facts['kuplalukema'])}/100 – {facts['vyohyke']}", strip(texts["loppusanat"]), ""]
     if texts["lahteet"]:
         L.append("Lähteet: " + " | ".join(f"{s['otsikko']} <{s['url']}>" for s in texts["lahteet"]))
     L.append("Kuplamittari on tietopaketti, ei sijoitusneuvontaa. Tutka on seurantalista, ei osto- tai myyntikehotus.")
     return "\n".join(L).replace(NBSP, " ")
+
+
+# ----------------------------------------------------------------------------
+# Arkiston hakemistosivu (GitHub Pages -verkkoversio)
+# ----------------------------------------------------------------------------
+def render_archive_index(hist: list[dict]) -> str:
+    """Kaikkien aiempien numeroiden listaus verkkosivuksi. Julkaistaan newsletter/arkisto/index.html,
+    joka näkyy selaimessa kun GitHub Pages on päällä (ks. UUTISKIRJE.md). Uusin numero ensin."""
+    rows = sorted(hist, key=lambda h: h.get("pvm", ""), reverse=True)
+    items = []
+    for h in rows:
+        try:
+            pvm = dt.date.fromisoformat(h["pvm"])
+            pvm_txt = fi_date(pvm)
+        except Exception:  # noqa: BLE001
+            pvm_txt = h.get("pvm", "")
+        score = h.get("kuplalukema")
+        pill = LEVEL.get(h.get("taso") or "none", LEVEL["none"])
+        score_txt = f"{disp(score)}/100" if score is not None else "–"
+        items.append(
+            '<tr><td style="padding:14px 0;border-top:1px solid #e1e0d9;">'
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+            f'<td style="font-size:13px;color:#898781;width:90px;">{pvm_txt}<br>Nro {h.get("numero", "?")}</td>'
+            '<td style="font-size:15px;color:#0b0b0b;padding:0 12px;">'
+            f'<a href="{html.escape(h.get("pvm", ""), quote=True)}.html" style="color:#0b0b0b;text-decoration:none;font-weight:600;">'
+            f'{html.escape(h.get("otsikko") or "(otsikko puuttuu)")}</a></td>'
+            f'<td align="right" style="white-space:nowrap;"><span style="display:inline-block;background:{pill["track"]};'
+            f'color:#0b0b0b;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;">{score_txt}'
+            f'{" &middot; " + html.escape(h["vyohyke"]) if h.get("vyohyke") else ""}</span></td>'
+            '</tr></table></td></tr>')
+    body = "".join(items) if items else '<tr><td style="padding:20px 0;color:#898781;">Ei vielä numeroita.</td></tr>'
+    return (
+        '<!DOCTYPE html><html lang="fi"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<meta name="color-scheme" content="light dark"><title>Kuplamittari – arkisto</title>{STYLE}</head>'
+        '<body class="bg-page" style="margin:0;padding:0;background:#f9f9f7;">'
+        '<table role="presentation" class="bg-page" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'style="background:#f9f9f7;"><tr><td align="center" style="padding:24px 12px;">'
+        '<table role="presentation" class="bg-card hair" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'style="max-width:640px;background:#fcfcfb;border:1px solid #e1e0d9;border-radius:14px;font-family:{FONT};">'
+        '<tr><td class="px" style="padding:28px 32px 8px;">'
+        '<div class="ink-1" style="font-size:15px;font-weight:800;letter-spacing:0.14em;color:#0b0b0b;">'
+        '<span style="color:#ec835a;">&#9679;</span>&nbsp;KUPLAMITTARI</div>'
+        '<h1 class="ink-1" style="margin:10px 0 0;font-size:24px;color:#0b0b0b;">Kaikki numerot</h1>'
+        '<p class="ink-2" style="margin:8px 0 0;font-size:14px;color:#52514e;">'
+        f'{len(rows)} numero{"a" if len(rows) != 1 else ""}. Uusin ensin.</p></td></tr>'
+        f'<tr><td class="px" style="padding:10px 32px 24px;"><table role="presentation" width="100%" '
+        f'cellpadding="0" cellspacing="0" border="0">{body}</table></td></tr>'
+        '</table></td></tr></table></body></html>')
 
 
 # ----------------------------------------------------------------------------
@@ -1464,6 +1753,7 @@ def main() -> int:
     ap.add_argument("--mock-ai")
     ap.add_argument("--mock-ai2", help="tutkan AI-vastaus tiedostosta (testaus)")
     ap.add_argument("--mock-markets")
+    ap.add_argument("--mock-feargreed", help="pelko/ahneus-mittarin JSON tiedostosta (testaus ilman verkkoa)")
     ap.add_argument("--mock-prices", help="osakeuniversumin hinnat CSV:stä (testaus ilman verkkoa)")
     ap.add_argument("--save-state", action="store_true", help="tallenna ennusteet ja historia myös ilman lähetystä")
     ap.add_argument("--date")
@@ -1489,6 +1779,15 @@ def main() -> int:
                 markets = json.load(f)
         else:
             markets = fetch_markets(wk)
+        if args.mock_feargreed:
+            with open(args.mock_feargreed, encoding="utf-8") as f:
+                fg = json.load(f)
+        else:
+            try:
+                fg = fear_greed(wk)
+            except Exception as e:  # noqa: BLE001
+                warn(f"pelko/ahneus-mittari epäonnistui, osio jätetään pois: {str(e)[:200]}")
+                fg = None
         hist = load_history()
         number, prev = issue_info(hist, wk)
         facts = build_factpack(latest, markets, wk, number, prev)
@@ -1522,6 +1821,7 @@ def main() -> int:
         tmpl = template_write(facts)
         tmpl["viikon_luku"] = template_luku(facts)
         tmpl["minuutti"] = template_minuutti(number, prev_topics)
+        tmpl["syvasukellus"] = template_syvasukellus(facts)
         texts, replaced = sanitize(ai_obj, tmpl, facts["kuplalukema"])
         if replaced:
             warn(f"AI-vastauksesta korvattiin pohjalla kentät: {', '.join(replaced)}")
@@ -1536,8 +1836,10 @@ def main() -> int:
                 traceback.print_exc()
 
         facts["_markets"] = markets
+        facts["_feargreed"] = fg
         ai_used = ai_obj is not None
-        page = render_html(facts, texts, wk, run_date, ai_used, tv)
+        page = render_html(facts, texts, wk, run_date, ai_used, tv, web=False)
+        page_web = render_html(facts, texts, wk, run_date, ai_used, tv, web=True)
         text = render_text(facts, texts, wk, run_date, tv)
         size_kb = len(page.encode("utf-8")) / 1024
         print(f"Kirjeen koko {size_kb:.0f} kt (Gmailin katkaisuraja 102 kt)")
@@ -1549,8 +1851,11 @@ def main() -> int:
         with open(NEWSLETTER_HTML, "w", encoding="utf-8") as f:
             f.write(page)
         with open(os.path.join(ARCHIVE_DIR, f"{run_date.isoformat()}.html"), "w", encoding="utf-8") as f:
-            f.write(page)
+            f.write(page_web)
         print(f"Uutiskirje tallennettu: {NEWSLETTER_HTML}")
+        if not SITE_URL:
+            print("HUOM: SITE_URL ei ole asetettu, joten kirjeeseen ei tullut linkkiä verkkoversioon "
+                  "(ks. UUTISKIRJE.md, kohta 'Verkkosivu').")
 
         subject = f"Kuplamittari vko {wk['viikko']}: {re.sub(r'[*]', '', texts['otsikko'])}"
         if prev and facts["kuplalukema"] >= ALERT_THRESHOLD > prev["kuplalukema"]:
@@ -1565,11 +1870,14 @@ def main() -> int:
             cost = round(sum(u.get("kustannus_usd") or 0 for u in (usage, usage2)), 3)
             hist = [h for h in hist if h.get("viikko_id") != week_key] + [{
                 "viikko_id": week_key, "numero": number, "pvm": run_date.isoformat(),
-                "kuplalukema": facts["kuplalukema"], "kattavuus_pct": latest.get("kattavuus_pct"),
+                "kuplalukema": facts["kuplalukema"], "vyohyke": facts["vyohyke"], "taso": facts["taso"],
+                "otsikko": strip_md(texts["otsikko"]), "kattavuus_pct": latest.get("kattavuus_pct"),
                 "ai": usage.get("malli") if ai_used else None, "kustannus_usd": cost or None,
                 "minuutti": (texts.get("minuutti") or {}).get("aihe"),
             }]
             save_history(hist)
+            with open(os.path.join(ARCHIVE_DIR, "index.html"), "w", encoding="utf-8") as f:
+                f.write(render_archive_index(hist))
         if WARNINGS:
             print("\nVAROITUKSET:\n  - " + "\n  - ".join(WARNINGS))
         return 0
