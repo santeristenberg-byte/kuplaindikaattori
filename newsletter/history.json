@@ -11,5 +11,18 @@
   "ai": "claude-haiku-4-5-20251001",
   "kustannus_usd": 0.259,
   "minuutti": "Miksi marginaalivelka ei vielä ole hirveä kupla-mitta – vaikka…"
+ },
+ {
+  "viikko_id": "2026-39",
+  "numero": 2,
+  "pvm": "2026-09-26",
+  "kuplalukema": 83.6,
+  "vyohyke": "Kupla-alue",
+  "taso": "serious",
+  "otsikko": "Tekoäly veti sijoittajat takaisin, kupla jatkaa nousuaan",
+  "kattavuus_pct": 100.0,
+  "ai": "claude-haiku-4-5-20251001",
+  "kustannus_usd": 0.674,
+  "minuutti": "Osakeriskipreemio – miksi sijoittajat eivät saa palkkiota riskistä."
  }
 ]

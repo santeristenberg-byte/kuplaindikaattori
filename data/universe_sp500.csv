@@ -66,6 +66,7 @@ BIIB,Biogen,Health Care
 BLK,BlackRock,Financials
 BX,Blackstone Inc.,Financials
 XYZ,"Block, Inc.",Financials
+BE,Bloom Energy,Industrials
 BNY,BNY Mellon,Financials
 BA,Boeing,Industrials
 BKNG,Booking Holdings,Consumer Discretionary
@@ -75,7 +76,6 @@ AVGO,Broadcom,Information Technology
 BR,Broadridge Financial Solutions,Industrials
 BRO,Brown & Brown,Financials
 BF.B,Brown–Forman,Consumer Staples
-BLDR,Builders FirstSource,Industrials
 BG,Bunge Global,Consumer Staples
 BXP,"BXP, Inc.",Real Estate
 CHRW,C.H. Robinson,Industrials
@@ -178,6 +178,7 @@ ESS,Essex Property Trust,Real Estate
 EL,Estée Lauder Companies (The),Consumer Staples
 EG,Everest Group,Financials
 EVRG,Evergy,Utilities
+P,Everpure,Information Technology
 ES,Eversource Energy,Utilities
 EXC,Exelon,Utilities
 EXE,Expand Energy,Energy
@@ -246,6 +247,7 @@ IBM,IBM,Information Technology
 IEX,IDEX Corporation,Industrials
 IDXX,Idexx Laboratories,Health Care
 ITW,Illinois Tool Works,Industrials
+ILMN,"Illumina, Inc.",Health Care
 INCY,Incyte,Health Care
 IR,Ingersoll Rand,Industrials
 PODD,Insulet Corporation,Health Care
@@ -316,7 +318,6 @@ MU,Micron Technology,Information Technology
 MSFT,Microsoft,Information Technology
 MAA,Mid-America Apartment Communities,Real Estate
 MRNA,Moderna,Health Care
-TAP,Molson Coors Beverage Company,Consumer Staples
 MDLZ,Mondelez International,Consumer Staples
 MPWR,Monolithic Power Systems,Information Technology
 MNST,Monster Beverage,Consumer Staples
@@ -443,7 +444,6 @@ TXT,Textron,Industrials
 TMO,Thermo Fisher Scientific,Health Care
 TJX,TJX Companies,Consumer Discretionary
 TKO,TKO Group Holdings,Communication Services
-TTD,Trade Desk (The),Communication Services
 TSCO,Tractor Supply,Consumer Discretionary
 TT,Trane Technologies,Industrials
 TDG,TransDigm Group,Industrials
