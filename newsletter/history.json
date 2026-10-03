@@ -24,5 +24,18 @@
   "ai": "claude-haiku-4-5-20251001",
   "kustannus_usd": 0.276,
   "minuutti": "Marginaalivelka – mikä se on ja miksi se kiinnostaa kuplamittaria"
+ },
+ {
+  "viikko_id": "2026-40",
+  "numero": 3,
+  "pvm": "2026-10-03",
+  "kuplalukema": 83.1,
+  "vyohyke": "Kupla-alue",
+  "taso": "serious",
+  "otsikko": "Valuaatiot nousivat ennätyskorkeuksiin",
+  "kattavuus_pct": 100.0,
+  "ai": "claude-haiku-4-5-20251001",
+  "kustannus_usd": 0.378,
+  "minuutti": "CAPE-luku: osakkeiden hintakerroin"
  }
 ]
