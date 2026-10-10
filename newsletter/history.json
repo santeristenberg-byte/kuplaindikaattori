@@ -37,5 +37,18 @@
   "ai": "claude-haiku-4-5-20251001",
   "kustannus_usd": 0.378,
   "minuutti": "CAPE-luku: osakkeiden hintakerroin"
+ },
+ {
+  "viikko_id": "2026-41",
+  "numero": 4,
+  "pvm": "2026-10-10",
+  "kuplalukema": 83.3,
+  "vyohyke": "Kupla-alue",
+  "taso": "serious",
+  "otsikko": "Ydinvoimasta kyse – ja arvostusten äärimmäisyydestä",
+  "kattavuus_pct": 100.0,
+  "ai": "claude-haiku-4-5-20251001",
+  "kustannus_usd": 0.217,
+  "minuutti": "P/E-luku: hinta, jonka maksat per tulos"
  }
 ]

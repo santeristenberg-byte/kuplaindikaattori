@@ -422,7 +422,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 271.25,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 275.04,
+   "tulos_pct": 1.4,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": 0.35,
+   "osuma": true
   },
   {
    "numero": 3,
@@ -441,7 +449,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 196.3,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 209.06,
+   "tulos_pct": 6.5,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": 5.46,
+   "osuma": true
   },
   {
    "numero": 3,
@@ -460,7 +476,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "BTC-USD",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 2687.3511,
+   "lahto_pvm": "2026-10-04",
+   "vertailun_lahto": 84765.5156,
+   "loppuhinta": 2485.5386,
+   "tulos_pct": -7.51,
+   "vertailu_pct": -2.62,
+   "ylituotto_pct": -4.89,
+   "osuma": false
   },
   {
    "numero": 3,
@@ -479,7 +503,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 191.41,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 225.0,
+   "tulos_pct": 17.55,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": 16.51,
+   "osuma": false
   },
   {
    "numero": 3,
@@ -498,7 +530,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 200.27,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 198.78,
+   "tulos_pct": -0.74,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": -1.79,
+   "osuma": false
   },
   {
    "numero": 3,
@@ -517,7 +557,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 191.41,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 225.0,
+   "tulos_pct": 17.55,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": 16.51,
+   "osuma": true
   },
   {
    "numero": 3,
@@ -536,7 +584,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 141.3,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 154.49,
+   "tulos_pct": 9.33,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": 8.29,
+   "osuma": true
   },
   {
    "numero": 3,
@@ -555,7 +611,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 422.8,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 455.03,
+   "tulos_pct": 7.62,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": 6.58,
+   "osuma": true
   },
   {
    "numero": 3,
@@ -574,7 +638,15 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
-   "tila": "auki"
+   "tila": "suljettu",
+   "lahtohinta": 68.92,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 73.46,
+   "tulos_pct": 6.59,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": 5.54,
+   "osuma": false
   },
   {
    "numero": 3,
@@ -593,6 +665,109 @@
    "lahto": "seuraavan kaupankäyntipäivän avaus",
    "vertailu": "^GSPC",
    "arvioidaan": "2026-10-09",
+   "tila": "suljettu",
+   "lahtohinta": 200.27,
+   "lahto_pvm": "2026-10-05",
+   "vertailun_lahto": 7730.8599,
+   "loppuhinta": 198.78,
+   "tulos_pct": -0.74,
+   "vertailu_pct": 1.04,
+   "ylituotto_pct": -1.79,
+   "osuma": false
+  },
+  {
+   "numero": 4,
+   "viikko_id": "2026-41",
+   "lahde": "saanto",
+   "tehty": "2026-10-10",
+   "tunnus": "MRNA",
+   "nimi": "Moderna",
+   "sektori": "Terveydenhuolto",
+   "luokka": "osake",
+   "tyyppi": "nousu",
+   "perustelu": "Vahva 12 viikon nousu (+264,0 %) ja kurssi 168,7 % yli 200 päivän keskiarvon.",
+   "laukaisija": "Trendin jatkuminen.",
+   "riski": "Momentum voi kääntyä nopeasti.",
+   "kurssi_jaadytettaessa": 225.0,
+   "lahto": "seuraavan kaupankäyntipäivän avaus",
+   "vertailu": "^GSPC",
+   "arvioidaan": "2026-10-16",
+   "tila": "auki"
+  },
+  {
+   "numero": 4,
+   "viikko_id": "2026-41",
+   "lahde": "saanto",
+   "tehty": "2026-10-10",
+   "tunnus": "P",
+   "nimi": "Everpure",
+   "sektori": "Teknologia",
+   "luokka": "osake",
+   "tyyppi": "nousu",
+   "perustelu": "Vahva 12 viikon nousu (+122,7 %) ja kurssi 81,0 % yli 200 päivän keskiarvon.",
+   "laukaisija": "Trendin jatkuminen.",
+   "riski": "Momentum voi kääntyä nopeasti.",
+   "kurssi_jaadytettaessa": 154.49,
+   "lahto": "seuraavan kaupankäyntipäivän avaus",
+   "vertailu": "^GSPC",
+   "arvioidaan": "2026-10-16",
+   "tila": "auki"
+  },
+  {
+   "numero": 4,
+   "viikko_id": "2026-41",
+   "lahde": "saanto",
+   "tehty": "2026-10-10",
+   "tunnus": "MPC",
+   "nimi": "Marathon Petroleum",
+   "sektori": "Energia",
+   "luokka": "osake",
+   "tyyppi": "nousu",
+   "perustelu": "Vahva 12 viikon nousu (+46,0 %) ja kurssi 52,3 % yli 200 päivän keskiarvon.",
+   "laukaisija": "Trendin jatkuminen.",
+   "riski": "Momentum voi kääntyä nopeasti.",
+   "kurssi_jaadytettaessa": 455.03,
+   "lahto": "seuraavan kaupankäyntipäivän avaus",
+   "vertailu": "^GSPC",
+   "arvioidaan": "2026-10-16",
+   "tila": "auki"
+  },
+  {
+   "numero": 4,
+   "viikko_id": "2026-41",
+   "lahde": "saanto",
+   "tehty": "2026-10-10",
+   "tunnus": "HPE",
+   "nimi": "Hewlett Packard Enterprise",
+   "sektori": "Teknologia",
+   "luokka": "osake",
+   "tyyppi": "varoitus",
+   "perustelu": "Kurssi on 64,5 % yli 200 päivän keskiarvon, mikä on universumin ylikuumentunein lukema.",
+   "laukaisija": "Voitonotot.",
+   "riski": "Ylikuumentunut kurssi voi silti jatkaa nousuaan.",
+   "kurssi_jaadytettaessa": 73.46,
+   "lahto": "seuraavan kaupankäyntipäivän avaus",
+   "vertailu": "^GSPC",
+   "arvioidaan": "2026-10-16",
+   "tila": "auki"
+  },
+  {
+   "numero": 4,
+   "viikko_id": "2026-41",
+   "lahde": "saanto",
+   "tehty": "2026-10-10",
+   "tunnus": "XLK",
+   "nimi": "Teknologia",
+   "sektori": "Teknologia",
+   "luokka": "sektori",
+   "tyyppi": "sektori",
+   "perustelu": "Vahvin 4 viikon momentum GICS-sektoreista (+6,0 %).",
+   "laukaisija": "Sektorirotaation jatkuminen.",
+   "riski": "Sektorirotaatio voi kääntyä nopeasti makrouutisten myötä.",
+   "kurssi_jaadytettaessa": 198.78,
+   "lahto": "seuraavan kaupankäyntipäivän avaus",
+   "vertailu": "^GSPC",
+   "arvioidaan": "2026-10-16",
    "tila": "auki"
   }
  ],
@@ -611,6 +786,11 @@
    "julkaistu": "ai",
    "itsearvio": "Viime viikon tutka osui 2/5 ennusteestaan, momentum-sääntö 4/5. Ehdokkaat jakautuivat eri tavoin: ILMN palkittiin terveydenhuollon rotaatiolla (+2,65 %), kun taas muistimarkkinoiden (MU) ja Solanan (SOL-USD) liikevoitot kutistuivat makrohäiriöiden ja kiinnostuksenpuutteen myötä. Korkea kupla-lukema (83,1) ja äärimmäinen arvostuspistemäärä (99,7) kertovat, että suurelta osin kyse on kohinasta; menettäneiden perusteluiden ongelma oli liiallinen riippuvuus trendistä ilman konkreettista viikon sisäistä katalyyttiä.",
    "oppi": "Korkean kupla-lukeman oloissa sektorirotaatio vaatii konkreettisen laukaisimen – tulosraportteja tai makrotietoja – pelkän momentum-trendin sijaan. Tämä parantaa osuvuuden todennäköisyyttä selvästi momentum-säännön tasoa."
+  },
+  "2026-41": {
+   "julkaistu": "saanto",
+   "itsearvio": "",
+   "oppi": ""
   }
  },
  "opit": [

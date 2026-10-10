@@ -1,31 +1,31 @@
-KUPLAINDIKAATTORI — viikko 40/2026   (data 2026-10-31)
+KUPLAINDIKAATTORI — viikko 41/2026   (data 2026-10-31)
 ================================================================
-KUPLARISKI        83.1 / 100   Kupla-alue  (-0.4 vs. edellinen ajo 2026-09-26)
+KUPLARISKI        83.3 / 100   Kupla-alue  (+0.1 vs. edellinen ajo 2026-10-03)
                  datan kattavuus 100 %
   Arvostus                 99.7   (paino 60 %, kattavuus 100 %)
-  Vipu & likviditeetti     58.3   (paino 40 %, kattavuus 100 %)
+  Vipu & likviditeetti     58.6   (paino 40 %, kattavuus 100 %)
   Ääriarvoja               6 / 11 muuttujasta yli 90. persentiilin (55 %)
 
 MUUTTUJAT (persentiili omaa historiaa vasten, 100 = kuplamaisin)
   A1 Shiller CAPE (S&P 500)                            100  ##########
-  A4 Buffett-indikaattori (Wilshire 5000 / BKT)        100  #########
+  A4 Buffett-indikaattori (Wilshire 5000 / BKT)        100  ##########
   A6 Osakeriskipreemio (1/CAPE − reaalikorko)           99  #########
   A8 Tobinin Q                                         100  #########
   B1 Margin debt / BKT                                  99  #########
   B2 Margin debtin 12 kk kasvu                          89  ########
   B3 Reaalinen M2-kasvu (12 kk)                         43  ####
-  B4 Keskuspankkilikviditeetti, 12 kk muutos (Fed+EKP+BoJ)   13  #
+  B4 Keskuspankkilikviditeetti, 12 kk muutos (Fed+EKP+BoJ)   14  #
   B5 Luottomarginaali (Moody's Baa − 10v)               96  #########
   B6 Reaalinen ohjauskorko                              62  ######
   B7 Yksityisen velan/BKT 3 v muutos                     7  
 
 ANALOGIA (mitä historiallista huippua nykytila muistuttaa)
   2021-11 Pandemiakupla        33 %   (11 yhteistä muuttujaa)
-  2000-03 Dotcom               18 %   (8 yhteistä muuttujaa)
+  2000-03 Dotcom               17 %   (8 yhteistä muuttujaa)
   1972-12 Nifty Fifty           0 %   (6 yhteistä muuttujaa)
   2007-10 Luottokupla           0 %   (9 yhteistä muuttujaa)
   Samankaltaisinta (2021-11 Pandemiakupla): Buffett-indikaattori (Wilshire 5000 / BKT); Margin debtin 12 kk kasvu; Luottomarginaali (Moody's Baa − 10v)
-  Erilaisinta:      Yksityisen velan/BKT 3 v muutos; Reaalinen ohjauskorko; Osakeriskipreemio (1/CAPE − reaalikorko)
+  Erilaisinta:      Yksityisen velan/BKT 3 v muutos; Reaalinen ohjauskorko; Shiller CAPE (S&P 500)
 
 52 viikon vaihteluväli: 73–84
 
