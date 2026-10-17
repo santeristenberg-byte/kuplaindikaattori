@@ -50,5 +50,18 @@
   "ai": "claude-haiku-4-5-20251001",
   "kustannus_usd": 0.217,
   "minuutti": "P/E-luku: hinta, jonka maksat per tulos"
+ },
+ {
+  "viikko_id": "2026-42",
+  "numero": 5,
+  "pvm": "2026-10-17",
+  "kuplalukema": 83.3,
+  "vyohyke": "Kupla-alue",
+  "taso": "serious",
+  "otsikko": "Ensi viikon tulokset: Meta, Tesla, Netflix ja muut tekoäly-johtajat",
+  "kattavuus_pct": 100.0,
+  "ai": "claude-haiku-4-5-20251001",
+  "kustannus_usd": 0.455,
+  "minuutti": "Osakeriskipreemio — palkkio epävarmuuden kannalta"
  }
 ]
