@@ -63,5 +63,18 @@
   "ai": "claude-haiku-4-5-20251001",
   "kustannus_usd": 0.455,
   "minuutti": "Osakeriskipreemio — palkkio epävarmuuden kannalta"
+ },
+ {
+  "viikko_id": "2026-43",
+  "numero": 6,
+  "pvm": "2026-10-24",
+  "kuplalukema": 83.2,
+  "vyohyke": "Kupla-alue",
+  "taso": "serious",
+  "otsikko": "S&P 500 laski 0,5 % – arvostus äärimmäinen",
+  "kattavuus_pct": 100.0,
+  "ai": null,
+  "kustannus_usd": null,
+  "minuutti": "Vertailuindeksi"
  }
 ]
