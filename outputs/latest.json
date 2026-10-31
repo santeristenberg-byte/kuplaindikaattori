@@ -1,8 +1,8 @@
 {
  "versio": "v0.9 (2026-09-19: faktapaketti uutiskirjeelle, B7 3 v)",
- "luotu_utc": "2026-10-24T10:28:02+00:00",
+ "luotu_utc": "2026-10-31T11:50:20+00:00",
  "datan_kk": "2026-10",
- "kuplalukema": 83.2,
+ "kuplalukema": 82.8,
  "vyohyke": "Kupla-alue",
  "taso": "serious",
  "kattavuus_pct": 100.0,
@@ -11,18 +11,18 @@
   "A": {
    "nimi": "Arvostus",
    "paino": 0.6,
-   "pisteet": 99.5
+   "pisteet": 99.4
   },
   "B": {
    "nimi": "Vipu & likviditeetti",
    "paino": 0.4,
-   "pisteet": 58.7
+   "pisteet": 58.0
   }
  },
  "teemat": {
   "arvostus": {
    "nimi": "Arvostus",
-   "pisteet": 99.5,
+   "pisteet": 99.4,
    "tila": "Äärimmäinen",
    "taso": "critical",
    "muuttujat": [
@@ -44,7 +44,7 @@
   },
   "raha": {
    "nimi": "Raha ja velka",
-   "pisteet": 44.5,
+   "pisteet": 43.5,
    "tila": "Koholla",
    "taso": "warning",
    "muuttujat": [
@@ -63,7 +63,7 @@
    "persentiili": 100.0,
    "kuplamaisempi_kun_pienempi": false,
    "yksikko": "kertaa 10 vuoden keskitulos",
-   "arvo": 51.6,
+   "arvo": 51.3,
    "arvon_kk": "2026-10",
    "historia_alkaa": 1880,
    "on_ennatys": true,
@@ -74,15 +74,15 @@
   "A4": {
    "nimi": "Buffett-indikaattori (Wilshire 5000 / BKT)",
    "pilari": "A",
-   "persentiili": 99.6,
+   "persentiili": 99.1,
    "kuplamaisempi_kun_pienempi": false,
    "yksikko": "% BKT:sta (Wilshire 5000 / BKT, likiarvo)",
-   "arvo": 233.0,
+   "arvo": 229.0,
    "arvon_kk": "2026-10",
    "historia_alkaa": 1989,
    "on_ennatys": false,
    "kuplamaisempi_kuin_nyt_vuosina": "2026",
-   "historian_kuplamaisin_arvo": 237.0,
+   "historian_kuplamaisin_arvo": 233.0,
    "historian_kuplamaisin_kk": "2026-08"
   },
   "A6": {
@@ -91,7 +91,7 @@
    "persentiili": 98.7,
    "kuplamaisempi_kun_pienempi": true,
    "yksikko": "%-yksikköä",
-   "arvo": -0.7,
+   "arvo": -0.68,
    "arvon_kk": "2026-10",
    "historia_alkaa": 1962,
    "on_ennatys": false,
@@ -119,7 +119,7 @@
    "persentiili": 99.4,
    "kuplamaisempi_kun_pienempi": false,
    "yksikko": "% BKT:sta",
-   "arvo": 4.46,
+   "arvo": 4.4,
    "arvon_kk": "2026-10",
    "historia_alkaa": 1997,
    "on_ennatys": false,
@@ -144,24 +144,24 @@
   "B3": {
    "nimi": "Reaalinen M2-kasvu (12 kk)",
    "pilari": "B",
-   "persentiili": 42.6,
+   "persentiili": 39.5,
    "kuplamaisempi_kun_pienempi": false,
    "yksikko": "% / 12 kk inflaatiokorjattuna",
-   "arvo": 2.3,
+   "arvo": 2.0,
    "arvon_kk": "2026-10",
    "historia_alkaa": 1960,
    "on_ennatys": false,
-   "kuplamaisempi_kuin_nyt_vuosina": "1960–1969, 1971–1973, 1975–1978, 1982–1987, 1996–2009, 2011–2017, 2019–2022",
+   "kuplamaisempi_kuin_nyt_vuosina": "1960–1969, 1971–1973, 1975–1978, 1982–1987, 1996–2022, 2026",
    "historian_kuplamaisin_arvo": 25.1,
    "historian_kuplamaisin_kk": "2021-02"
   },
   "B4": {
    "nimi": "Keskuspankkilikviditeetti, 12 kk muutos (Fed+EKP+BoJ)",
    "pilari": "B",
-   "persentiili": 14.2,
+   "persentiili": 13.8,
    "kuplamaisempi_kun_pienempi": false,
    "yksikko": "% / 12 kk",
-   "arvo": -4.6,
+   "arvo": -4.7,
    "arvon_kk": "2026-10",
    "historia_alkaa": 2003,
    "on_ennatys": false,
@@ -172,14 +172,14 @@
   "B5": {
    "nimi": "Luottomarginaali (Moody's Baa − 10v)",
    "pilari": "B",
-   "persentiili": 97.1,
+   "persentiili": 95.8,
    "kuplamaisempi_kun_pienempi": true,
    "yksikko": "%-yksikköä",
-   "arvo": 1.46,
+   "arvo": 1.49,
    "arvon_kk": "2026-10",
    "historia_alkaa": 1986,
    "on_ennatys": false,
-   "kuplamaisempi_kuin_nyt_vuosina": "1989, 1994–1995, 1997, 2024–2025",
+   "kuplamaisempi_kuin_nyt_vuosina": "1989, 1994–1997, 2024–2026",
    "historian_kuplamaisin_arvo": 1.3,
    "historian_kuplamaisin_kk": "1994-11"
   },
@@ -189,7 +189,7 @@
    "persentiili": 61.8,
    "kuplamaisempi_kun_pienempi": true,
    "yksikko": "%",
-   "arvo": 0.62,
+   "arvo": 0.63,
    "arvon_kk": "2026-10",
    "historia_alkaa": 1960,
    "on_ennatys": false,
@@ -230,7 +230,7 @@
   },
   {
    "huippu": "2000-03 Dotcom",
-   "samankaltaisuus_pct": 17,
+   "samankaltaisuus_pct": 18,
    "yhteisia_muuttujia": 8,
    "samankaltaisinta": [
     "Shiller CAPE (S&P 500)",
@@ -265,7 +265,7 @@
    "samankaltaisinta": [
     "Reaalinen M2-kasvu (12 kk)",
     "Reaalinen ohjauskorko",
-    "Osakeriskipreemio (1/CAPE − reaalikorko)"
+    "Luottomarginaali (Moody's Baa − 10v)"
    ],
    "erilaisinta": [
     "Yksityisen velan/BKT 3 v muutos",
@@ -276,11 +276,11 @@
  ],
  "raakatasot": {
   "usa_10v_korko_pct": {
-   "arvo": 4.96,
+   "arvo": 4.98,
    "kk": "2026-10"
   },
   "usa_10v_reaalikorko_pct": {
-   "arvo": 2.64,
+   "arvo": 2.63,
    "kk": "2026-10"
   },
   "margin_debt": {
@@ -303,8 +303,8 @@
    "kk": "2026-09"
   },
   "pohjainflaatio_pce_12kk_pct": {
-   "arvo": 3.0,
-   "kk": "2026-08"
+   "arvo": 3.1,
+   "kk": "2026-09"
   }
  },
  "varoitukset": [
