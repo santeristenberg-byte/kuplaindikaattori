@@ -89,5 +89,18 @@
   "ai": null,
   "kustannus_usd": null,
   "minuutti": "Momentum"
+ },
+ {
+  "viikko_id": "2026-45",
+  "numero": 8,
+  "pvm": "2026-11-07",
+  "kuplalukema": 85.7,
+  "vyohyke": "Kupla-alue",
+  "taso": "serious",
+  "otsikko": "S&P 500 laski 2,7 % – arvostus äärimmäinen",
+  "kattavuus_pct": 90.9,
+  "ai": null,
+  "kustannus_usd": null,
+  "minuutti": "200 päivän liukuva keskiarvo"
  }
 ]
