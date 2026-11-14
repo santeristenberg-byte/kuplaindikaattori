@@ -102,5 +102,18 @@
   "ai": null,
   "kustannus_usd": null,
   "minuutti": "200 päivän liukuva keskiarvo"
+ },
+ {
+  "viikko_id": "2026-46",
+  "numero": 9,
+  "pvm": "2026-11-14",
+  "kuplalukema": 86.3,
+  "vyohyke": "Kupla-alue",
+  "taso": "serious",
+  "otsikko": "S&P 500 nousi 2,5 % – arvostus äärimmäinen",
+  "kattavuus_pct": 90.9,
+  "ai": null,
+  "kustannus_usd": null,
+  "minuutti": "CAPE eli Shillerin P/E-luku"
  }
 ]
